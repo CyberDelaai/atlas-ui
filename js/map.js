@@ -94,6 +94,42 @@
     return out;
   }
 
+  // ---- palette resolution ----------------------------------------------------
+  // Turn the user-picked hex colours in ATLAS.state.colors into the numeric
+  // COL / WATER structure the renderer consumes. Single-colour slots map
+  // straight through; land / water seed a derived ramp (and the sea's waves /
+  // the title tone) so one pick restyles a whole element. Falls back to the
+  // ATLAS.const defaults for any slot left unset, keeping the stock look intact.
+  const _mul = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
+  const _mix = (c, d, t) => [c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t, c[2] + (d[2] - c[2]) * t];
+  ATLAS.resolvePalette = function resolvePalette() {
+    const A = ATLAS.hexToArr;
+    const cc = (ATLAS.state && ATLAS.state.colors) || {};
+    const D = C.COL, DW = C.WATER;
+    const land   = cc.land   ? A(cc.land)   : D.hilight;
+    const water  = cc.water  ? A(cc.water)  : DW.hilight;
+    const region = cc.region ? A(cc.region) : D.region;
+    return {
+      COL: {
+        shadow:  _mul(land, 0.20),                 // land ramp: dark end
+        hilight: land,                             // land ramp: light end (the pick)
+        line:    cc.border ? A(cc.border) : D.line,
+        frame:   cc.frame  ? A(cc.frame)  : D.frame,
+        amber:   cc.marker ? A(cc.marker) : D.amber,
+        region:  region,
+        title:   _mix(region, [236, 247, 240], 0.62), // bottom title: lightened region
+        bg:      D.bg,
+      },
+      WATER: {
+        blueMin: DW.blueMin,
+        shadow:  _mul(water, 0.45),                // deep-water ramp: dark
+        hilight: water,                            // deep-water ramp: light (the pick)
+        wave:    _mix(water, [200, 225, 235], 0.55), // wave stroke: lightened water
+        waveA:   DW.waveA,
+      },
+    };
+  };
+
   // ---- pixel recolouring -----------------------------------------------------
   const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -113,8 +149,7 @@
   // Map hillshade luminance onto a duotone ramp, in place. Land uses the teal
   // shadow->highlight ramp; pixels flagged in the water mask are pulled onto a
   // separate deep ramp so the sea reads darker.
-  function duotone(data, sh, hi, water) {
-    const W = C.WATER;
+  function duotone(data, sh, hi, water, W) {
     for (let p = 0, i = 0; i < data.length; p++, i += 4) {
       let L = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
       L = Math.min(1, Math.max(0, (L - 0.5) * 1.18 + 0.5)); // gentle contrast
@@ -127,8 +162,7 @@
   }
 
   // Stroke a horizontal sine-wave weave, clipped to the water mask, over the map.
-  function drawWaterWaves(ctx, size, water) {
-    const W = C.WATER;
+  function drawWaterWaves(ctx, size, water, W) {
     const wcv = document.createElement('canvas');
     wcv.width = wcv.height = size;
     const wctx = wcv.getContext('2d');
@@ -283,6 +317,7 @@
   // opts: { lat, lon, areaKm, title, region, center, onProgress(done,total) }
   ATLAS.renderMap = async function renderMap(opts) {
     const mapSize = C.MAP_SIZE, pad = C.PAD, strip = C.STRIP;
+    const PAL = ATLAS.resolvePalette(), COL = PAL.COL, WATER = PAL.WATER;
     const v = computeView(opts.lat, opts.lon, opts.areaKm, mapSize);
 
     // progress across all three tiled layers (hillshade, water mask, borders)
@@ -300,18 +335,18 @@
     const mapCv = cropTo(hsLayer, v, mapSize);
     const mctx = mapCv.getContext('2d');
     const hid = mctx.getImageData(0, 0, mapSize, mapSize);
-    duotone(hid.data, C.COL.shadow, C.COL.hilight, water);
+    duotone(hid.data, COL.shadow, COL.hilight, water, WATER);
     mctx.putImageData(hid, 0, 0);
 
     // 3) texture weave (+ wave pattern over the sea)
-    drawHexTexture(mctx, mapSize, C.COL.hilight);
-    drawWaterWaves(mctx, mapSize, water);
+    drawHexTexture(mctx, mapSize, COL.hilight);
+    drawWaterWaves(mctx, mapSize, water, WATER);
 
     // 4) borders: stitch, recolour to light lines, composite
     const bdLayer = await stitch(C.TILE_BOUNDS, v, tick);
     const bdctx = bdLayer.cv.getContext('2d');
     const bid = bdctx.getImageData(0, 0, bdLayer.cv.width, bdLayer.cv.height);
-    tintAlpha(bid.data, C.COL.line);
+    tintAlpha(bid.data, COL.line);
     bdctx.putImageData(bid, 0, 0);
     mctx.save();
     mctx.globalAlpha = 0.55;
@@ -328,25 +363,25 @@
     out.width = mapSize + pad * 2;
     out.height = mapSize + pad * 2 + strip;
     const ctx = out.getContext('2d');
-    ctx.fillStyle = rgb(C.COL.bg, 1);
+    ctx.fillStyle = rgb(COL.bg, 1);
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(mapCv, pad, pad);
 
-    drawRegionName(ctx, pad, pad, mapSize, opts.region, C.COL.region);
-    drawCenterPin(ctx, pad + mapSize / 2, pad + mapSize / 2, opts.center, C.COL.amber);
-    drawFrame(ctx, pad, pad, mapSize, C.COL.frame);
+    drawRegionName(ctx, pad, pad, mapSize, opts.region, COL.region);
+    drawCenterPin(ctx, pad + mapSize / 2, pad + mapSize / 2, opts.center, COL.amber);
+    drawFrame(ctx, pad, pad, mapSize, COL.frame);
 
     // bottom strip: title (left) + scale bar (right)
     const baseY = mapSize + pad * 2 + strip / 2 + 4;
     if (opts.title) {
       ctx.save();
       ctx.font = "500 18px 'JetBrains Mono', monospace";
-      ctx.fillStyle = rgb(C.COL.title, 0.95);
+      ctx.fillStyle = rgb(COL.title, 0.95);
       ctx.textBaseline = 'middle';
       ctx.fillText(opts.title.toUpperCase(), pad, baseY);
       ctx.restore();
     }
-    drawScaleBar(ctx, pad + mapSize, baseY + 6, mapSize, opts.areaKm, C.COL.frame);
+    drawScaleBar(ctx, pad + mapSize, baseY + 6, mapSize, opts.areaKm, COL.frame);
 
     out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKm) };
     return out;

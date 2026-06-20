@@ -152,6 +152,11 @@
     }
   }
 
+  // Re-run the render with the current state — used by the colour palette UI to
+  // restyle the existing map (tiles come from browser cache, so it's quick).
+  // No-op until a map has been rendered at least once this session.
+  ATLAS.rerender = function rerender() { if (lastCanvas) render(); };
+
   // Drop the rendered canvas into the stage (replacing placeholder / prior map).
   function mountCanvas(canvas) {
     const stage = $('stage');

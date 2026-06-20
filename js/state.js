@@ -48,7 +48,27 @@ ATLAS.const = {
     wave:   [78, 140, 170], // wave stroke colour
     waveA:  0.45,           // wave stroke alpha
   },
+
+  // Preset swatches offered in every map-colour palette popup (the broad
+  // cyberpunk set shared with the sibling apps, plus ATLAS's own teal defaults
+  // at the end so each slot's default shows up as an active swatch).
+  PALETTE: [
+    '#fcee0a', '#00f0ff', '#ff003c', '#39ff14', '#ff8800', '#c800ff',
+    '#00ff9d', '#ff10f0', '#ff6b6b', '#ff9f43', '#feca57', '#1dd1a1',
+    '#00d2d3', '#54a0ff', '#a29bfe', '#cd84f1', '#ff9ff3', '#ffffff',
+    '#4e8474', '#092840', '#9cceb8', '#78b29e', '#e8b840', '#78aa96',
+  ],
 };
+
+// hex <-> [r,g,b] helpers, shared by the palette UI and the renderer.
+ATLAS.hexToArr = (hex) => {
+  let h = (hex || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+ATLAS.arrToHex = (c) =>
+  '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
 
 // localStorage setter (silent if storage is blocked).
 ATLAS.save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
@@ -64,4 +84,18 @@ ATLAS.state = {
   region: '',       // big faint region name (auto-filled, editable)
   center: '',       // amber center-point label (auto-filled, editable)
   rendering: false, // guard against overlapping renders
+
+  // User-pickable map colours (hex). Each drives one element of the render;
+  // land / water seed a derived light->dark ramp (see ATLAS.resolvePalette in
+  // map.js). Defaults mirror ATLAS.const.COL so the out-of-box look is unchanged.
+  colors: {
+    land:   '#4e8474', // terrain (highlight tone; shadow derived)
+    water:  '#092840', // sea / lakes (deep tone; ramp + waves derived)
+    border: '#9cceb8', // country / region border lines
+    frame:  '#78b29e', // square frame + scale bar
+    marker: '#e8b840', // amber centre pin + label
+    region: '#78aa96', // big faint region name (seeds the title tone too)
+  },
+  // Last custom (non-preset) pick per slot, so the palette popup can re-offer it.
+  customColors: {},
 };

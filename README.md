@@ -20,10 +20,13 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   `<canvas>`, recolored to the duotone teal palette.
 - **Labels** — the centre point, region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
+- **Colors** — recolor any map element (land, water, borders, frame, marker, region)
+  from the **MAP COLORS** panel: each opens a palette popup of preset swatches plus a
+  custom color picker, and the map restyles live without re-fetching tiles.
 - **Export** — one click writes a high-resolution PNG.
-- **Persistent** — your inputs and the last rendered map are saved in the browser
-  (`localStorage`), so reopening the page restores the whole working area without
-  re-fetching any tiles.
+- **Persistent** — your inputs, color picks and the last rendered map are saved in
+  the browser (`localStorage`), so reopening the page restores the whole working area
+  without re-fetching any tiles.
 
 Geocoding uses [OpenStreetMap Nominatim](https://nominatim.org/); terrain and
 boundary tiles are © Esri and its data partners.
