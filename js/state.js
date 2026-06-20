@@ -10,6 +10,13 @@ ATLAS.const = {
   // ESRI ArcGIS Online raster tiles (no API key). {z}/{y}/{x} = level/row/col.
   TILE_HILLSHADE: 'https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
   TILE_BOUNDS:    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
+  // Used purely as a land/water mask: OpenStreetMap's standard raster paints
+  // water a distinct light blue (#aad3df) at every zoom level, while land is
+  // green / beige. The hillshade itself can't tell flat sea from flat land
+  // (both render near-white), so we read water from here. (ESRI's ocean base
+  // was unusable — it floods inland areas blue past ~z10.) Token replacement in
+  // stitch() is by name, so the {z}/{x}/{y} order here is fine.
+  TILE_WATERMASK: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   // OpenStreetMap Nominatim — forward (search) + reverse geocoding.
   GEOCODE:  'https://nominatim.openstreetmap.org/search',
   REVERSE:  'https://nominatim.openstreetmap.org/reverse',
@@ -29,6 +36,17 @@ ATLAS.const = {
     region:  [120, 170, 150], // big faint region name
     title:   [207, 234, 221], // bottom title text
     bg:      [6, 14, 13],     // canvas backdrop
+  },
+
+  // Sea / ocean styling. Water pixels are identified from the TILE_OCEAN mask
+  // (sea is blue there, land is beige); we then repaint those hillshade pixels
+  // onto a deep-blue ramp and stroke a wave pattern over them.
+  WATER: {
+    blueMin: 20,            // mask pixel is water when blue exceeds red by this
+    shadow: [3, 16, 30],    // deep-water ramp: dark
+    hilight:[9, 40, 64],    // deep-water ramp: light (kept dark on purpose)
+    wave:   [78, 140, 170], // wave stroke colour
+    waveA:  0.45,           // wave stroke alpha
   },
 };
 

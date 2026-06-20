@@ -97,15 +97,58 @@
   // ---- pixel recolouring -----------------------------------------------------
   const lerp = (a, b, t) => a + (b - a) * t;
 
-  // Map hillshade luminance onto the shadow->highlight teal ramp, in place.
-  function duotone(data, sh, hi) {
-    for (let i = 0; i < data.length; i += 4) {
+  // Build a per-pixel water mask (1 = sea/lake/river) from a cropped TILE_WATERMASK
+  // layer: OSM paints water blue, land green/beige. A pixel is water when its
+  // blue channel clearly leads red (rejects beige land) and is at least its
+  // green (rejects green vegetation, where green leads).
+  function waterMask(maskCv, size) {
+    const d = maskCv.getContext('2d').getImageData(0, 0, size, size).data;
+    const N = size * size, t = C.WATER.blueMin, mask = new Uint8Array(N);
+    for (let p = 0, i = 0; p < N; p++, i += 4) {
+      if (d[i + 3] > 8 && d[i + 2] - d[i] > t && d[i + 2] >= d[i + 1]) mask[p] = 1;
+    }
+    return mask;
+  }
+
+  // Map hillshade luminance onto a duotone ramp, in place. Land uses the teal
+  // shadow->highlight ramp; pixels flagged in the water mask are pulled onto a
+  // separate deep ramp so the sea reads darker.
+  function duotone(data, sh, hi, water) {
+    const W = C.WATER;
+    for (let p = 0, i = 0; i < data.length; p++, i += 4) {
       let L = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
       L = Math.min(1, Math.max(0, (L - 0.5) * 1.18 + 0.5)); // gentle contrast
-      data[i]     = lerp(sh[0], hi[0], L);
-      data[i + 1] = lerp(sh[1], hi[1], L);
-      data[i + 2] = lerp(sh[2], hi[2], L);
+      const a = water[p] ? W.shadow  : sh;
+      const b = water[p] ? W.hilight : hi;
+      data[i]     = lerp(a[0], b[0], L);
+      data[i + 1] = lerp(a[1], b[1], L);
+      data[i + 2] = lerp(a[2], b[2], L);
     }
+  }
+
+  // Stroke a horizontal sine-wave weave, clipped to the water mask, over the map.
+  function drawWaterWaves(ctx, size, water) {
+    const W = C.WATER;
+    const wcv = document.createElement('canvas');
+    wcv.width = wcv.height = size;
+    const wctx = wcv.getContext('2d');
+    wctx.strokeStyle = rgb(W.wave, W.waveA);
+    wctx.lineWidth = 1;
+    const amp = 2.2, wl = 22, gap = 10;
+    for (let y = -gap; y < size + gap; y += gap) {
+      const ph = y * 0.5; // offset each row so crests don't line up vertically
+      wctx.beginPath();
+      for (let x = 0; x <= size; x += 2) {
+        const yy = y + Math.sin(x / wl + ph) * amp;
+        x ? wctx.lineTo(x, yy) : wctx.moveTo(x, yy);
+      }
+      wctx.stroke();
+    }
+    // Punch the waves out to water only, then composite over the map.
+    const wid = wctx.getImageData(0, 0, size, size), wd = wid.data;
+    for (let p = 0; p < size * size; p++) if (!water[p]) wd[p * 4 + 3] = 0;
+    wctx.putImageData(wid, 0, 0);
+    ctx.drawImage(wcv, 0, 0);
   }
 
   // Repaint every visible pixel of a transparent overlay one flat colour,
@@ -242,24 +285,29 @@
     const mapSize = C.MAP_SIZE, pad = C.PAD, strip = C.STRIP;
     const v = computeView(opts.lat, opts.lon, opts.areaKm, mapSize);
 
-    // progress across both tiled layers
-    const total = tileCount(v) * 2;
+    // progress across all three tiled layers (hillshade, water mask, borders)
+    const total = tileCount(v) * 3;
     let done = 0;
     const tick = () => { if (opts.onProgress) opts.onProgress(++done, total); };
     if (opts.onProgress) opts.onProgress(0, total);
 
-    // 1) terrain: stitch + crop + duotone
+    // 1) water mask: stitch + crop the OSM water layer, derive sea pixels
+    const wmLayer = await stitch(C.TILE_WATERMASK, v, tick);
+    const water = waterMask(cropTo(wmLayer, v, mapSize), mapSize);
+
+    // 2) terrain: stitch + crop + duotone (water pixels onto the deep ramp)
     const hsLayer = await stitch(C.TILE_HILLSHADE, v, tick);
     const mapCv = cropTo(hsLayer, v, mapSize);
     const mctx = mapCv.getContext('2d');
     const hid = mctx.getImageData(0, 0, mapSize, mapSize);
-    duotone(hid.data, C.COL.shadow, C.COL.hilight);
+    duotone(hid.data, C.COL.shadow, C.COL.hilight, water);
     mctx.putImageData(hid, 0, 0);
 
-    // 2) texture weave
+    // 3) texture weave (+ wave pattern over the sea)
     drawHexTexture(mctx, mapSize, C.COL.hilight);
+    drawWaterWaves(mctx, mapSize, water);
 
-    // 3) borders: stitch, recolour to light lines, composite
+    // 4) borders: stitch, recolour to light lines, composite
     const bdLayer = await stitch(C.TILE_BOUNDS, v, tick);
     const bdctx = bdLayer.cv.getContext('2d');
     const bid = bdctx.getImageData(0, 0, bdLayer.cv.width, bdLayer.cv.height);
@@ -274,7 +322,7 @@
     );
     mctx.restore();
 
-    // 4) compose final canvas (map + margins + bottom strip)
+    // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);
     const out = document.createElement('canvas');
     out.width = mapSize + pad * 2;
