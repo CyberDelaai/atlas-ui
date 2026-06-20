@@ -185,6 +185,93 @@
     ctx.drawImage(wcv, 0, 0);
   }
 
+  // Coarsen the pixel-noisy water mask onto a STEP-grid (majority vote per cell)
+  // then denoise with a 3x3 majority pass that drops lone specks. This is the
+  // shared low-poly water shape: both the land/sea fill and the coastline outline
+  // are built from it, so they line up exactly. Bigger STEP = lower-poly.
+  const COAST_STEP = 4;
+  function lowPolyWater(water, size, step) {
+    const gw = Math.ceil(size / step), gh = Math.ceil(size / step);
+
+    // 1) coarsen: each cell is water if most of its pixels are
+    const g = new Uint8Array(gw * gh);
+    for (let gy = 0; gy < gh; gy++) {
+      for (let gx = 0; gx < gw; gx++) {
+        let wet = 0, tot = 0;
+        const x1 = Math.min(size, gx * step + step), y1 = Math.min(size, gy * step + step);
+        for (let y = gy * step; y < y1; y++)
+          for (let x = gx * step; x < x1; x++) { tot++; if (water[y * size + x]) wet++; }
+        g[gy * gw + gx] = wet * 2 >= tot ? 1 : 0;
+      }
+    }
+
+    // 2) denoise: majority over the 3x3 neighbourhood smooths edges and removes
+    // isolated cells (single-block lakes/islands that read as noise)
+    const sm = new Uint8Array(gw * gh);
+    for (let gy = 0; gy < gh; gy++) {
+      for (let gx = 0; gx < gw; gx++) {
+        let s = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const x = gx + dx, y = gy + dy;
+            if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
+            n++; s += g[y * gw + x];
+          }
+        sm[gy * gw + gx] = s * 2 > n ? 1 : 0;
+      }
+    }
+    return { grid: sm, gw, gh, step };
+  }
+
+  // Expand a low-poly grid back to a per-pixel mask (each pixel takes its cell's
+  // value) so the duotone land/sea fill snaps to the same blocky shape the coast
+  // outline traces — the marching-squares contour sits right on these cell edges.
+  function gridToMask(lp, size) {
+    const { grid, gw, step } = lp;
+    const mask = new Uint8Array(size * size);
+    for (let y = 0; y < size; y++) {
+      const row = Math.floor(y / step) * gw;
+      for (let x = 0; x < size; x++) mask[y * size + x] = grid[row + Math.floor(x / step)];
+    }
+    return mask;
+  }
+
+  // Trace the coast as a low-poly outline in the border colour, so the sea reads
+  // as a bordered shape like the countries. Marching squares over the shared
+  // low-poly grid emits clean faceted segments instead of a jagged pixel edge.
+  function drawCoastline(ctx, lp, col) {
+    const { grid, gw, gh, step } = lp;
+    const at = (gx, gy) => (gx < 0 || gy < 0 || gx >= gw || gy >= gh) ? 0 : grid[gy * gw + gx];
+    ctx.save();
+    ctx.strokeStyle = rgb(col, 0.9);
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    const seg = (a, b) => { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); };
+    for (let gy = 0; gy < gh - 1; gy++) {
+      for (let gx = 0; gx < gw - 1; gx++) {
+        const cse = (at(gx, gy) << 3) | (at(gx + 1, gy) << 2)
+                  | (at(gx + 1, gy + 1) << 1) | at(gx, gy + 1);
+        if (cse === 0 || cse === 15) continue;
+        const ox = gx * step + step / 2, oy = gy * step + step / 2;
+        const T = [ox + step / 2, oy], R = [ox + step, oy + step / 2],
+              B = [ox + step / 2, oy + step], L = [ox, oy + step / 2];
+        switch (cse) {
+          case 1: case 14: seg(L, B); break;
+          case 2: case 13: seg(B, R); break;
+          case 3: case 12: seg(L, R); break;
+          case 4: case 11: seg(T, R); break;
+          case 6: case 9:  seg(T, B); break;
+          case 7: case 8:  seg(T, L); break;
+          case 5:  seg(T, L); seg(B, R); break; // saddle
+          case 10: seg(T, R); seg(B, L); break; // saddle
+        }
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // Repaint every visible pixel of a transparent overlay one flat colour,
   // preserving its alpha — turns ESRI's dark border lines into light teal ones.
   function tintAlpha(data, col) {
@@ -326,21 +413,25 @@
     const tick = () => { if (opts.onProgress) opts.onProgress(++done, total); };
     if (opts.onProgress) opts.onProgress(0, total);
 
-    // 1) water mask: stitch + crop the OSM water layer, derive sea pixels
+    // 1) water mask: stitch + crop the OSM water layer, derive sea pixels, then
+    // snap to the shared low-poly shape so the fill, waves and coast all align
     const wmLayer = await stitch(C.TILE_WATERMASK, v, tick);
     const water = waterMask(cropTo(wmLayer, v, mapSize), mapSize);
+    const lp = lowPolyWater(water, mapSize, COAST_STEP);
+    const fill = gridToMask(lp, mapSize);
 
     // 2) terrain: stitch + crop + duotone (water pixels onto the deep ramp)
     const hsLayer = await stitch(C.TILE_HILLSHADE, v, tick);
     const mapCv = cropTo(hsLayer, v, mapSize);
     const mctx = mapCv.getContext('2d');
     const hid = mctx.getImageData(0, 0, mapSize, mapSize);
-    duotone(hid.data, COL.shadow, COL.hilight, water, WATER);
+    duotone(hid.data, COL.shadow, COL.hilight, fill, WATER);
     mctx.putImageData(hid, 0, 0);
 
     // 3) texture weave (+ wave pattern over the sea)
     drawHexTexture(mctx, mapSize, COL.hilight);
-    drawWaterWaves(mctx, mapSize, water, WATER);
+    drawWaterWaves(mctx, mapSize, fill, WATER);
+    drawCoastline(mctx, lp, COL.line);
 
     // 4) borders: stitch, recolour to light lines, composite
     const bdLayer = await stitch(C.TILE_BOUNDS, v, tick);
