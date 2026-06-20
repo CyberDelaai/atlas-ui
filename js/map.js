@@ -113,7 +113,8 @@
     const region = cc.region ? A(cc.region) : D.region;
     return {
       COL: {
-        shadow:  _mul(land, 0.20),                 // land ramp: dark end
+        // dark end of the land ramp: the picked shade, or derived from land if unset
+        shadow:  cc.landShade ? A(cc.landShade) : _mul(land, 0.20),
         hilight: land,                             // land ramp: light end (the pick)
         line:    cc.border ? A(cc.border) : D.line,
         frame:   cc.frame  ? A(cc.frame)  : D.frame,
@@ -150,16 +151,29 @@
 
   // Map hillshade luminance onto a duotone ramp, in place. Land uses the teal
   // shadow->highlight ramp; pixels flagged in the water mask are pulled onto a
-  // separate deep ramp so the sea reads darker.
-  function duotone(data, sh, hi, water, W) {
+  // separate deep ramp so the sea reads darker. A directional light gradient
+  // (lighter toward the light's azimuth, darker opposite) is added over the
+  // land only, so flat terrain still reads as lit from one angle.
+  function duotone(data, sh, hi, water, W, w, h) {
+    // Light vector pointing FROM the light source into the scene, in pixel space
+    // (y grows downward). azimuth 0 = N (up), 90 = E (right).
+    const a = C.LIGHT.azimuth * Math.PI / 180, str = C.LIGHT.strength;
+    const lx = Math.sin(a), ly = -Math.cos(a);
     for (let p = 0, i = 0; i < data.length; p++, i += 4) {
       let L = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
       L = Math.min(1, Math.max(0, (L - 0.5) * 1.18 + 0.5)); // gentle contrast
-      const a = water[p] ? W.shadow  : sh;
-      const b = water[p] ? W.hilight : hi;
-      data[i]     = lerp(a[0], b[0], L);
-      data[i + 1] = lerp(a[1], b[1], L);
-      data[i + 2] = lerp(a[2], b[2], L);
+      if (!water[p] && str) {
+        // dot of the pixel's centred position with the light vector, in [-1,1]:
+        // +1 on the lit side, -1 on the shaded side.
+        const x = p % w, y = (p - x) / w;
+        const d = ((x / w * 2 - 1) * lx + (y / h * 2 - 1) * ly) / 2;
+        L = Math.min(1, Math.max(0, L + d * str));
+      }
+      const c0 = water[p] ? W.shadow  : sh;
+      const c1 = water[p] ? W.hilight : hi;
+      data[i]     = lerp(c0[0], c1[0], L);
+      data[i + 1] = lerp(c0[1], c1[1], L);
+      data[i + 2] = lerp(c0[2], c1[2], L);
     }
   }
 
@@ -441,7 +455,7 @@
     const mapCv = cropTo(hsLayer, v, mapW, mapH);
     const mctx = mapCv.getContext('2d');
     const hid = mctx.getImageData(0, 0, mapW, mapH);
-    duotone(hid.data, COL.shadow, COL.hilight, fill, WATER);
+    duotone(hid.data, COL.shadow, COL.hilight, fill, WATER, mapW, mapH);
     mctx.putImageData(hid, 0, 0);
 
     // 3) texture weave (+ wave pattern over the sea)

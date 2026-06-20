@@ -26,6 +26,13 @@ ATLAS.const = {
   PAD: 30,         // canvas margin around the map
   STRIP: 64,       // bottom title/scale strip height
 
+  // Directional relief light applied across the land in the duotone pass: the
+  // terrain is brightened toward AZIMUTH and darkened toward the opposite side,
+  // so flat ground still reads as "lit from one angle" rather than one flat
+  // tone. AZIMUTH is the compass bearing the light comes FROM (deg, 0 = N,
+  // 90 = E); STRENGTH is how far it lifts/drops the luminance ramp (0 = off).
+  LIGHT: { azimuth: 315, strength: 0.22 },
+
   // Duotone + chrome palette, sampled from hong-kong-example.png.
   COL: {
     shadow:  [9, 26, 24],     // hillshade darkest -> deep teal
@@ -90,7 +97,8 @@ ATLAS.state = {
   // land / water seed a derived light->dark ramp (see ATLAS.resolvePalette in
   // map.js). Defaults mirror ATLAS.const.COL so the out-of-box look is unchanged.
   colors: {
-    land:   '#4e8474', // terrain (highlight tone; shadow derived)
+    land:   '#4e8474', // terrain lit tone (highlight end of the relief ramp)
+    landShade: '#101a17', // terrain shaded tone (dark end; ~land x 0.20)
     water:  '#092840', // sea / lakes (deep tone; ramp + waves derived)
     border: '#9cceb8', // country / region border lines
     frame:  '#78b29e', // map frame + scale bar
