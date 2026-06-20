@@ -4,8 +4,8 @@
 //
 // Pipeline: coords + area -> Web-Mercator tile range -> stitch ESRI hillshade
 // tiles -> recolor to the teal duotone -> composite ESRI country/region borders
-// as light lines -> draw the square frame, region name, center pin, title and
-// scale bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
+// as light lines -> draw the rectangular frame, region name, center pin, title
+// and scale bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
 (function (ATLAS) {
   'use strict';
   const C = ATLAS.const;
@@ -19,17 +19,17 @@
     return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * worldPx(z);
   };
 
-  // ---- geometry: square ground area -> bbox + best zoom ---------------------
-  // A km-square on the ground maps to an (almost) pixel-square in Web Mercator
-  // near the centre, because the projection is locally conformal — so we can
-  // render straight into a square canvas without distortion.
-  function computeView(lat, lon, areaKm, mapSize) {
-    const halfM = areaKm * 1000 / 2;
-    const dLat = halfM / 111320;
-    const dLon = halfM / (111320 * Math.cos(lat * Math.PI / 180));
+  // ---- geometry: rectangular ground area -> bbox + best zoom ----------------
+  // A km-rectangle on the ground maps to an (almost) pixel-rectangle in Web
+  // Mercator near the centre, because the projection is locally conformal — so
+  // we render into a canvas whose pixel aspect matches the km aspect (mapW/mapH)
+  // without distortion. Width spans longitude (east-west), height latitude.
+  function computeView(lat, lon, areaKmW, areaKmH, mapW, mapH) {
+    const dLat = (areaKmH * 1000 / 2) / 111320;
+    const dLon = (areaKmW * 1000 / 2) / (111320 * Math.cos(lat * Math.PI / 180));
     const north = lat + dLat, south = lat - dLat, west = lon - dLon, east = lon + dLon;
     // Largest zoom whose bbox pixel-width is ~1:1 with the target, capped.
-    let z = Math.round(Math.log2(mapSize * 360 / ((east - west) * worldPx(0))));
+    let z = Math.round(Math.log2(mapW * 360 / ((east - west) * worldPx(0))));
     z = Math.max(1, Math.min(C.MAX_ZOOM, z));
     return {
       z, north, south, west, east,
@@ -82,14 +82,16 @@
     return { cv, ox: tx0 * TILE, oy: ty0 * TILE };
   }
 
-  // Crop the stitched layer down to exactly the bbox, scaled to mapSize square.
-  function cropTo(layer, v, mapSize) {
+  // Crop the stitched layer down to exactly the bbox, scaled to the mapW×mapH
+  // output rectangle.
+  function cropTo(layer, v, mapW, mapH) {
     const out = document.createElement('canvas');
-    out.width = out.height = mapSize;
+    out.width = mapW;
+    out.height = mapH;
     out.getContext('2d').drawImage(
       layer.cv,
       v.x0 - layer.ox, v.y0 - layer.oy, v.x1 - v.x0, v.y1 - v.y0,
-      0, 0, mapSize, mapSize
+      0, 0, mapW, mapH
     );
     return out;
   }
@@ -137,9 +139,9 @@
   // layer: OSM paints water blue, land green/beige. A pixel is water when its
   // blue channel clearly leads red (rejects beige land) and is at least its
   // green (rejects green vegetation, where green leads).
-  function waterMask(maskCv, size) {
-    const d = maskCv.getContext('2d').getImageData(0, 0, size, size).data;
-    const N = size * size, t = C.WATER.blueMin, mask = new Uint8Array(N);
+  function waterMask(maskCv, w, h) {
+    const d = maskCv.getContext('2d').getImageData(0, 0, w, h).data;
+    const N = w * h, t = C.WATER.blueMin, mask = new Uint8Array(N);
     for (let p = 0, i = 0; p < N; p++, i += 4) {
       if (d[i + 3] > 8 && d[i + 2] - d[i] > t && d[i + 2] >= d[i + 1]) mask[p] = 1;
     }
@@ -162,25 +164,26 @@
   }
 
   // Stroke a horizontal sine-wave weave, clipped to the water mask, over the map.
-  function drawWaterWaves(ctx, size, water, W) {
+  function drawWaterWaves(ctx, w, h, water, W) {
     const wcv = document.createElement('canvas');
-    wcv.width = wcv.height = size;
+    wcv.width = w;
+    wcv.height = h;
     const wctx = wcv.getContext('2d');
     wctx.strokeStyle = rgb(W.wave, W.waveA);
     wctx.lineWidth = 1;
     const amp = 2.2, wl = 22, gap = 10;
-    for (let y = -gap; y < size + gap; y += gap) {
+    for (let y = -gap; y < h + gap; y += gap) {
       const ph = y * 0.5; // offset each row so crests don't line up vertically
       wctx.beginPath();
-      for (let x = 0; x <= size; x += 2) {
+      for (let x = 0; x <= w; x += 2) {
         const yy = y + Math.sin(x / wl + ph) * amp;
         x ? wctx.lineTo(x, yy) : wctx.moveTo(x, yy);
       }
       wctx.stroke();
     }
     // Punch the waves out to water only, then composite over the map.
-    const wid = wctx.getImageData(0, 0, size, size), wd = wid.data;
-    for (let p = 0; p < size * size; p++) if (!water[p]) wd[p * 4 + 3] = 0;
+    const wid = wctx.getImageData(0, 0, w, h), wd = wid.data;
+    for (let p = 0; p < w * h; p++) if (!water[p]) wd[p * 4 + 3] = 0;
     wctx.putImageData(wid, 0, 0);
     ctx.drawImage(wcv, 0, 0);
   }
@@ -190,17 +193,17 @@
   // shared low-poly water shape: both the land/sea fill and the coastline outline
   // are built from it, so they line up exactly. Bigger STEP = lower-poly.
   const COAST_STEP = 4;
-  function lowPolyWater(water, size, step) {
-    const gw = Math.ceil(size / step), gh = Math.ceil(size / step);
+  function lowPolyWater(water, w, h, step) {
+    const gw = Math.ceil(w / step), gh = Math.ceil(h / step);
 
     // 1) coarsen: each cell is water if most of its pixels are
     const g = new Uint8Array(gw * gh);
     for (let gy = 0; gy < gh; gy++) {
       for (let gx = 0; gx < gw; gx++) {
         let wet = 0, tot = 0;
-        const x1 = Math.min(size, gx * step + step), y1 = Math.min(size, gy * step + step);
+        const x1 = Math.min(w, gx * step + step), y1 = Math.min(h, gy * step + step);
         for (let y = gy * step; y < y1; y++)
-          for (let x = gx * step; x < x1; x++) { tot++; if (water[y * size + x]) wet++; }
+          for (let x = gx * step; x < x1; x++) { tot++; if (water[y * w + x]) wet++; }
         g[gy * gw + gx] = wet * 2 >= tot ? 1 : 0;
       }
     }
@@ -226,12 +229,12 @@
   // Expand a low-poly grid back to a per-pixel mask (each pixel takes its cell's
   // value) so the duotone land/sea fill snaps to the same blocky shape the coast
   // outline traces — the marching-squares contour sits right on these cell edges.
-  function gridToMask(lp, size) {
+  function gridToMask(lp, w, h) {
     const { grid, gw, step } = lp;
-    const mask = new Uint8Array(size * size);
-    for (let y = 0; y < size; y++) {
+    const mask = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
       const row = Math.floor(y / step) * gw;
-      for (let x = 0; x < size; x++) mask[y * size + x] = grid[row + Math.floor(x / step)];
+      for (let x = 0; x < w; x++) mask[y * w + x] = grid[row + Math.floor(x / step)];
     }
     return mask;
   }
@@ -285,14 +288,14 @@
 
   // Faint hex weave across the whole map — the "off the map" texture from the
   // example that reads strongest over flat water / lowland.
-  function drawHexTexture(ctx, size, col) {
-    const r = 17, h = r * Math.sqrt(3);
+  function drawHexTexture(ctx, w, h, col) {
+    const r = 17, hh = r * Math.sqrt(3);
     ctx.save();
     ctx.strokeStyle = rgb(col, 0.05);
     ctx.lineWidth = 1;
-    for (let row = 0, y = 0; y < size + h; y += h / 2, row++) {
+    for (let row = 0, y = 0; y < h + hh; y += hh / 2, row++) {
       const off = (row % 2) ? r * 1.5 : 0;
-      for (let x = -r; x < size + r; x += r * 3) {
+      for (let x = -r; x < w + r; x += r * 3) {
         hexPath(ctx, x + off, y, r);
         ctx.stroke();
       }
@@ -309,16 +312,16 @@
     ctx.closePath();
   }
 
-  // Square frame with augmented-ui style corner ticks.
-  function drawFrame(ctx, x, y, size, col) {
+  // Rectangular frame with augmented-ui style corner ticks.
+  function drawFrame(ctx, x, y, w, h, col) {
     ctx.save();
     ctx.strokeStyle = rgb(col, 0.85);
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     ctx.lineWidth = 3;
     ctx.strokeStyle = rgb(col, 1);
     const t = 26;
-    const corners = [[x, y, 1, 1], [x + size, y, -1, 1], [x, y + size, 1, -1], [x + size, y + size, -1, -1]];
+    const corners = [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]];
     for (const [cx, cy, sx, sy] of corners) {
       ctx.beginPath();
       ctx.moveTo(cx, cy + sy * t); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx * t, cy);
@@ -353,7 +356,7 @@
   }
 
   // Big faint region name across the top, letter-spaced like the example.
-  function drawRegionName(ctx, x, y, size, text, col) {
+  function drawRegionName(ctx, x, y, text, col) {
     if (!text) return;
     ctx.save();
     ctx.font = "500 30px 'JetBrains Mono', monospace";
@@ -374,9 +377,9 @@
   }
   function fmtKm(n) { return (n % 1 === 0 ? n.toString() : n.toFixed(1)); }
 
-  function drawScaleBar(ctx, rightX, baseY, mapSize, areaKm, col) {
-    const total = niceScale(areaKm);
-    const pxPerKm = mapSize / areaKm;
+  function drawScaleBar(ctx, rightX, baseY, mapW, areaKmW, col) {
+    const total = niceScale(areaKmW);
+    const pxPerKm = mapW / areaKmW;
     const barW = total * pxPerKm;
     const segs = 4, segW = barW / segs, h = 6;
     const x = rightX - barW, y = baseY;
@@ -400,12 +403,25 @@
     ctx.restore();
   }
 
+  // Fit the km rectangle into the output canvas: the longer ground edge maps to
+  // C.MAP_SIZE px, the shorter scales down to keep the aspect undistorted. A
+  // minimum keeps very thin slivers from collapsing to a useless pixel count.
+  function fitMapPx(areaKmW, areaKmH) {
+    const cap = C.MAP_SIZE, min = 256;
+    const ar = areaKmW / areaKmH; // >1 = landscape, <1 = portrait
+    let mapW, mapH;
+    if (ar >= 1) { mapW = cap; mapH = Math.round(cap / ar); }
+    else { mapH = cap; mapW = Math.round(cap * ar); }
+    return { mapW: Math.max(min, mapW), mapH: Math.max(min, mapH) };
+  }
+
   // ---- public: render the whole thing ---------------------------------------
-  // opts: { lat, lon, areaKm, title, region, center, onProgress(done,total) }
+  // opts: { lat, lon, areaKmW, areaKmH, title, region, center, onProgress(done,total) }
   ATLAS.renderMap = async function renderMap(opts) {
-    const mapSize = C.MAP_SIZE, pad = C.PAD, strip = C.STRIP;
+    const pad = C.PAD, strip = C.STRIP;
+    const { mapW, mapH } = fitMapPx(opts.areaKmW, opts.areaKmH);
     const PAL = ATLAS.resolvePalette(), COL = PAL.COL, WATER = PAL.WATER;
-    const v = computeView(opts.lat, opts.lon, opts.areaKm, mapSize);
+    const v = computeView(opts.lat, opts.lon, opts.areaKmW, opts.areaKmH, mapW, mapH);
 
     // progress across all three tiled layers (hillshade, water mask, borders)
     const total = tileCount(v) * 3;
@@ -416,21 +432,21 @@
     // 1) water mask: stitch + crop the OSM water layer, derive sea pixels, then
     // snap to the shared low-poly shape so the fill, waves and coast all align
     const wmLayer = await stitch(C.TILE_WATERMASK, v, tick);
-    const water = waterMask(cropTo(wmLayer, v, mapSize), mapSize);
-    const lp = lowPolyWater(water, mapSize, COAST_STEP);
-    const fill = gridToMask(lp, mapSize);
+    const water = waterMask(cropTo(wmLayer, v, mapW, mapH), mapW, mapH);
+    const lp = lowPolyWater(water, mapW, mapH, COAST_STEP);
+    const fill = gridToMask(lp, mapW, mapH);
 
     // 2) terrain: stitch + crop + duotone (water pixels onto the deep ramp)
     const hsLayer = await stitch(C.TILE_HILLSHADE, v, tick);
-    const mapCv = cropTo(hsLayer, v, mapSize);
+    const mapCv = cropTo(hsLayer, v, mapW, mapH);
     const mctx = mapCv.getContext('2d');
-    const hid = mctx.getImageData(0, 0, mapSize, mapSize);
+    const hid = mctx.getImageData(0, 0, mapW, mapH);
     duotone(hid.data, COL.shadow, COL.hilight, fill, WATER);
     mctx.putImageData(hid, 0, 0);
 
     // 3) texture weave (+ wave pattern over the sea)
-    drawHexTexture(mctx, mapSize, COL.hilight);
-    drawWaterWaves(mctx, mapSize, fill, WATER);
+    drawHexTexture(mctx, mapW, mapH, COL.hilight);
+    drawWaterWaves(mctx, mapW, mapH, fill, WATER);
     drawCoastline(mctx, lp, COL.line);
 
     // 4) borders: stitch, recolour to light lines, composite
@@ -444,26 +460,26 @@
     mctx.drawImage(
       bdLayer.cv,
       v.x0 - bdLayer.ox, v.y0 - bdLayer.oy, v.x1 - v.x0, v.y1 - v.y0,
-      0, 0, mapSize, mapSize
+      0, 0, mapW, mapH
     );
     mctx.restore();
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);
     const out = document.createElement('canvas');
-    out.width = mapSize + pad * 2;
-    out.height = mapSize + pad * 2 + strip;
+    out.width = mapW + pad * 2;
+    out.height = mapH + pad * 2 + strip;
     const ctx = out.getContext('2d');
     ctx.fillStyle = rgb(COL.bg, 1);
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(mapCv, pad, pad);
 
-    drawRegionName(ctx, pad, pad, mapSize, opts.region, COL.region);
-    drawCenterPin(ctx, pad + mapSize / 2, pad + mapSize / 2, opts.center, COL.amber);
-    drawFrame(ctx, pad, pad, mapSize, COL.frame);
+    drawRegionName(ctx, pad, pad, opts.region, COL.region);
+    drawCenterPin(ctx, pad + mapW / 2, pad + mapH / 2, opts.center, COL.amber);
+    drawFrame(ctx, pad, pad, mapW, mapH, COL.frame);
 
     // bottom strip: title (left) + scale bar (right)
-    const baseY = mapSize + pad * 2 + strip / 2 + 4;
+    const baseY = mapH + pad * 2 + strip / 2 + 4;
     if (opts.title) {
       ctx.save();
       ctx.font = "500 18px 'JetBrains Mono', monospace";
@@ -472,9 +488,9 @@
       ctx.fillText(opts.title.toUpperCase(), pad, baseY);
       ctx.restore();
     }
-    drawScaleBar(ctx, pad + mapSize, baseY + 6, mapSize, opts.areaKm, COL.frame);
+    drawScaleBar(ctx, pad + mapW, baseY + 6, mapW, opts.areaKmW, COL.frame);
 
-    out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKm) };
+    out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW) };
     return out;
   };
 })(window.ATLAS);

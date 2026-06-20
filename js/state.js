@@ -22,8 +22,8 @@ ATLAS.const = {
   REVERSE:  'https://nominatim.openstreetmap.org/reverse',
 
   MAX_ZOOM: 16,    // ESRI hillshade detail cap
-  MAP_SIZE: 1024,  // rendered map square, in px (export resolution)
-  PAD: 30,         // canvas margin around the map square
+  MAP_SIZE: 1024,  // longer rendered map edge, in px (export resolution)
+  PAD: 30,         // canvas margin around the map
   STRIP: 64,       // bottom title/scale strip height
 
   // Duotone + chrome palette, sampled from hong-kong-example.png.
@@ -31,7 +31,7 @@ ATLAS.const = {
     shadow:  [9, 26, 24],     // hillshade darkest -> deep teal
     hilight: [78, 132, 116],  // hillshade brightest -> light teal
     line:    [156, 206, 184], // country / region border lines
-    frame:   [120, 178, 158], // square frame + scale bar
+    frame:   [120, 178, 158], // map frame + scale bar
     amber:   [232, 184, 64],  // center label pin (matches example districts)
     region:  [120, 170, 150], // big faint region name
     title:   [207, 234, 221], // bottom title text
@@ -79,7 +79,8 @@ ATLAS.save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 ATLAS.state = {
   lat: 22.2819,     // default view: Hong Kong (the example location)
   lon: 114.1583,
-  areaKm: 40,       // edge length of the square area of interest, in km
+  areaKmW: 40,      // width of the rectangular area of interest, in km
+  areaKmH: 40,      // height of the rectangular area of interest, in km
   title: '',        // bottom title strip (auto-filled from geocode, editable)
   region: '',       // big faint region name (auto-filled, editable)
   center: '',       // amber center-point label (auto-filled, editable)
@@ -92,7 +93,7 @@ ATLAS.state = {
     land:   '#4e8474', // terrain (highlight tone; shadow derived)
     water:  '#092840', // sea / lakes (deep tone; ramp + waves derived)
     border: '#9cceb8', // country / region border lines
-    frame:  '#78b29e', // square frame + scale bar
+    frame:  '#78b29e', // map frame + scale bar
     marker: '#e8b840', // amber centre pin + label
     region: '#78aa96', // big faint region name (seeds the title tone too)
   },

@@ -3,9 +3,9 @@
 A free, in-browser **cyberpunk map generator** — the newest tool in the
 [cyberdeck.tools](https://cyberdeck.tools/) family (COMMLINK · CHRONOS · GRIDMAP).
 
-Enter real-world coordinates (or search for a place), choose how big a square of
+Enter real-world coordinates (or search for a place), choose how big a rectangle of
 ground to capture, and ATLAS renders a stylized hillshade terrain map — recolored
-to the cyberdeck teal palette, with country / region borders, a square frame,
+to the cyberdeck teal palette, with country / region borders, a frame,
 a labelled centre pin, a region name, a title strip and a scale bar — then exports
 it as a PNG.
 
@@ -13,8 +13,8 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
 
 ## How it works
 
-- **Coordinates + area** — type a latitude / longitude and a square edge length in
-  km, or use **FIND PLACE** to geocode a name into coordinates.
+- **Coordinates + area** — type a latitude / longitude and the area's width and
+  height in km, or use **FIND PLACE** to geocode a name into coordinates.
 - **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles and
   borders from ESRI's boundary tiles; both are key-free and fetched straight onto a
   `<canvas>`, recolored to the duotone teal palette.

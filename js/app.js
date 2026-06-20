@@ -41,11 +41,13 @@
   }
 
   // ---- state <-> form sync ----
+  const clampKm = (n) => Math.min(Math.max(n, 1), 600);
   function readForm() {
     S.lat = num($('latInput').value) ?? S.lat;
     S.lon = num($('lonInput').value) ?? S.lon;
-    const km = num($('areaInput').value);
-    S.areaKm = km && km > 0 ? Math.min(km, 600) : S.areaKm;
+    const w = num($('areaInputW').value), h = num($('areaInputH').value);
+    if (w && w > 0) S.areaKmW = clampKm(w);
+    if (h && h > 0) S.areaKmH = clampKm(h);
     S.title = $('titleInput').value.trim();
     S.region = $('regionInput').value.trim();
     S.center = $('centerInput').value.trim();
@@ -53,7 +55,8 @@
   function writeForm() {
     $('latInput').value = S.lat;
     $('lonInput').value = S.lon;
-    $('areaInput').value = S.areaKm;
+    $('areaInputW').value = S.areaKmW;
+    $('areaInputH').value = S.areaKmH;
     $('titleInput').value = S.title;
     $('regionInput').value = S.region;
     $('centerInput').value = S.center;
@@ -61,7 +64,8 @@
   function persist() {
     ATLAS.save('atlas:lat', S.lat);
     ATLAS.save('atlas:lon', S.lon);
-    ATLAS.save('atlas:area', S.areaKm);
+    ATLAS.save('atlas:areaW', S.areaKmW);
+    ATLAS.save('atlas:areaH', S.areaKmH);
     ATLAS.save('atlas:title', S.title);
     ATLAS.save('atlas:region', S.region);
     ATLAS.save('atlas:center', S.center);
@@ -80,7 +84,7 @@
   function writeOutInfo(zoom) {
     $('outInfo').innerHTML =
       `<span>LAT ${S.lat}</span><span>LON ${S.lon}</span>` +
-      `<span>${S.areaKm}×${S.areaKm} km</span><span>z${zoom}</span>`;
+      `<span>${S.areaKmW}×${S.areaKmH} km</span><span>z${zoom}</span>`;
   }
 
   // ---- locate (forward geocode a place name) ----
@@ -130,7 +134,7 @@
     $('stage').classList.add('rendering');
     try {
       const canvas = await ATLAS.renderMap({
-        lat: S.lat, lon: S.lon, areaKm: S.areaKm,
+        lat: S.lat, lon: S.lon, areaKmW: S.areaKmW, areaKmH: S.areaKmH,
         title: S.title, region: S.region, center: S.center,
         onProgress: (d, t) => setStatus(ATLAS.t('st_loading') + ` ${d}/${t}`),
       });
@@ -196,7 +200,7 @@
       const a = document.createElement('a');
       const tag = (S.center || 'map').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       a.href = url;
-      a.download = `atlas-${tag || 'map'}-${S.areaKm}km.png`;
+      a.download = `atlas-${tag || 'map'}-${S.areaKmW}x${S.areaKmH}km.png`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }, 'image/png');
@@ -208,7 +212,10 @@
     const get = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
     S.lat = num(get('atlas:lat', S.lat)) ?? S.lat;
     S.lon = num(get('atlas:lon', S.lon)) ?? S.lon;
-    S.areaKm = num(get('atlas:area', S.areaKm)) ?? S.areaKm;
+    // Migrate the old single square edge ('atlas:area') into both dimensions.
+    const oldArea = num(get('atlas:area', null));
+    S.areaKmW = num(get('atlas:areaW', oldArea ?? S.areaKmW)) ?? S.areaKmW;
+    S.areaKmH = num(get('atlas:areaH', oldArea ?? S.areaKmH)) ?? S.areaKmH;
     S.title = get('atlas:title', S.title);
     S.region = get('atlas:region', S.region);
     S.center = get('atlas:center', S.center);
@@ -220,7 +227,7 @@
     $('searchBtn').addEventListener('click', onLocate);
     $('placeSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') onLocate(); });
     // re-render on Enter from any coordinate / area field
-    ['latInput', 'lonInput', 'areaInput'].forEach((id) =>
+    ['latInput', 'lonInput', 'areaInputW', 'areaInputH'].forEach((id) =>
       $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') render(); }));
   }
 
