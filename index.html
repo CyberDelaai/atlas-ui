@@ -1,4 +1,4 @@
-<!-- ATLAS v0.1.0 -->
+<!-- ATLAS v0.2.0 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.1.0</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.0</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -84,7 +84,50 @@
     <!-- LEFT config -->
     <aside class="config config-left" data-augmented-ui="tl-clip br-clip border">
       <h2 data-i18n="h_controls">// CONTROLS</h2>
-      <p class="hint" data-i18n="placeholder_left">Left control panel — start building here.</p>
+
+      <div class="field">
+        <label for="placeSearch" data-i18n="l_search">FIND PLACE</label>
+        <div class="row">
+          <input id="placeSearch" type="text" placeholder="Hong Kong" autocomplete="off" />
+          <button id="searchBtn" class="btn btn-sm" type="button" data-i18n="b_locate">LOCATE</button>
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="row">
+        <div class="field">
+          <label for="latInput" data-i18n="l_lat">LATITUDE</label>
+          <input id="latInput" type="number" step="0.00001" min="-85" max="85" placeholder="22.2819" />
+        </div>
+        <div class="field">
+          <label for="lonInput" data-i18n="l_lon">LONGITUDE</label>
+          <input id="lonInput" type="number" step="0.00001" min="-180" max="180" placeholder="114.1583" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="areaInput" data-i18n="l_area">AREA — SQUARE EDGE (KM)</label>
+        <input id="areaInput" type="number" step="1" min="1" max="600" placeholder="40" />
+      </div>
+
+      <hr class="divider" />
+
+      <div class="field">
+        <label for="titleInput" data-i18n="l_title">TITLE</label>
+        <input id="titleInput" type="text" placeholder="—" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="regionInput" data-i18n="l_region">REGION NAME</label>
+        <input id="regionInput" type="text" placeholder="—" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="centerInput" data-i18n="l_center">CENTER LABEL</label>
+        <input id="centerInput" type="text" placeholder="—" autocomplete="off" />
+      </div>
+
+      <button id="genBtn" class="btn btn-block" type="button" data-i18n="b_render">RENDER MAP</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
     </aside>
 
     <!-- CENTER working area -->
@@ -92,7 +135,7 @@
       <div class="stage" id="stage">
         <div class="placeholder">
           <b data-i18n="ph_title">ATLAS</b><br />
-          <span data-i18n="ph_sub">blank scaffold — ready to build</span>
+          <span data-i18n="ph_sub">enter coordinates and render a map</span>
         </div>
       </div>
     </main>
@@ -100,7 +143,9 @@
     <!-- RIGHT config -->
     <aside class="config config-right" data-augmented-ui="tl-clip br-clip border">
       <h2 data-i18n="h_output">// OUTPUT</h2>
-      <p class="hint" data-i18n="placeholder_right">Right output panel — start building here.</p>
+      <p class="hint" data-i18n="hint_output">Free ESRI hillshade terrain + country / region borders, recolored to the cyberdeck palette. Runs entirely in your browser.</p>
+      <div id="outInfo" class="out-info"></div>
+      <button id="dlBtn" class="btn btn-block" type="button" disabled data-i18n="b_export">EXPORT PNG</button>
     </aside>
   </div>
 </div>
@@ -110,6 +155,7 @@
 <script defer src="js/state.js"></script>
 <script defer src="js/i18n.js"></script>
 <script defer src="js/header.js"></script>
+<script defer src="js/map.js"></script>
 <script defer src="js/app.js"></script>
 </body>
 </html>

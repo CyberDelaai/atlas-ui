@@ -1,13 +1,29 @@
 # ATLAS
 
-A free, in-browser cyberpunk utility — the newest tool in the
+A free, in-browser **cyberpunk map generator** — the newest tool in the
 [cyberdeck.tools](https://cyberdeck.tools/) family (COMMLINK · CHRONOS · GRIDMAP).
 
-> **Status: blank scaffold.** This repo currently ships only the shared chrome
-> (header, tool-switcher, theming, i18n, version-bump infrastructure). The tool's
-> actual feature set is not built yet — it's a starting point to build on.
+Enter real-world coordinates (or search for a place), choose how big a square of
+ground to capture, and ATLAS renders a stylized hillshade terrain map — recolored
+to the cyberdeck teal palette, with country / region borders, a square frame,
+a labelled centre pin, a region name, a title strip and a scale bar — then exports
+it as a PNG.
 
 No build step, no backend — just open `index.html`. Everything runs client-side.
+
+## How it works
+
+- **Coordinates + area** — type a latitude / longitude and a square edge length in
+  km, or use **FIND PLACE** to geocode a name into coordinates.
+- **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles and
+  borders from ESRI's boundary tiles; both are key-free and fetched straight onto a
+  `<canvas>`, recolored to the duotone teal palette.
+- **Labels** — the centre point, region name and bottom title are auto-filled from a
+  reverse-geocode lookup and are fully editable before export.
+- **Export** — one click writes a high-resolution PNG.
+
+Geocoding uses [OpenStreetMap Nominatim](https://nominatim.org/); terrain and
+boundary tiles are © Esri and its data partners.
 
 ## Running
 

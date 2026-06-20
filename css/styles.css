@@ -143,6 +143,40 @@
     background: linear-gradient(90deg, transparent, rgba(var(--main-rgb),0.55), transparent);
   }
 
+  /* ---------- Form controls (config panels) ---------- */
+  .field { margin-bottom: 12px; }
+  .field > label {
+    display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 5px;
+  }
+  .config input[type="text"], .config input[type="number"] {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid rgba(var(--main-rgb),0.3);
+    padding: 8px 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .config input:focus {
+    outline: none; border-color: var(--main);
+    box-shadow: 0 0 8px rgba(var(--main-rgb),0.35);
+  }
+  .config input::placeholder { color: rgba(122,122,136,0.6); }
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  .row .field { flex: 1; margin-bottom: 0; }
+  .row #searchBtn { flex-shrink: 0; }
+  .btn-sm { height: 36px; padding: 0 12px; font-size: 12px; letter-spacing: 2px; }
+  .btn-block { width: 100%; margin-top: 16px; }
+  .status { margin-top: 10px; font-size: 11px; letter-spacing: 1px; color: var(--dim); min-height: 14px; }
+  .status.ok { color: var(--main); }
+  .status.warn { color: var(--magenta); }
+
+  /* right panel output readout */
+  .out-info {
+    display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 4px;
+    font-size: 11px; letter-spacing: 1px; color: var(--main);
+  }
+  .out-info:empty { display: none; }
+  .out-info span { white-space: nowrap; }
+
   /* ---------- Center working area ---------- */
   .workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .stage {
@@ -154,6 +188,17 @@
   }
   .stage .placeholder { padding: 24px; font-size: 14px; letter-spacing: 1px; line-height: 1.8; }
   .stage .placeholder b { color: var(--main); font-size: 18px; letter-spacing: 3px; }
+  .stage canvas {
+    max-width: 100%; max-height: calc(100vh - 240px); width: auto; height: auto;
+    display: block; box-shadow: 0 0 24px rgba(0,0,0,0.6);
+  }
+  .stage.rendering { border-color: var(--main); }
+  .stage.rendering::after {
+    content: ''; position: absolute; inset: 0;
+    background: rgba(var(--main-rgb),0.04);
+    animation: stagePulse 1s ease-in-out infinite;
+  }
+  @keyframes stagePulse { 0%,100% { opacity: .3; } 50% { opacity: .8; } }
 
   @media (max-width: 1100px) {
     .layout { flex-wrap: wrap; }
