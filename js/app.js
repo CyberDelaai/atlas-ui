@@ -62,6 +62,25 @@
     ATLAS.save('atlas:lat', S.lat);
     ATLAS.save('atlas:lon', S.lon);
     ATLAS.save('atlas:area', S.areaKm);
+    ATLAS.save('atlas:title', S.title);
+    ATLAS.save('atlas:region', S.region);
+    ATLAS.save('atlas:center', S.center);
+  }
+  // Persist the rendered map itself (PNG data URL) plus the zoom shown in the
+  // output readout, so a reload restores the whole working area, not just the
+  // form. toDataURL can throw on a tainted canvas (ours isn't — all tile hosts
+  // send CORS headers) and setItem can throw on quota; both fail silently.
+  function persistMap(canvas, zoom) {
+    try {
+      ATLAS.save('atlas:map', canvas.toDataURL('image/png'));
+      ATLAS.save('atlas:mapZoom', zoom == null ? '' : zoom);
+    } catch (e) {}
+  }
+  // The output readout below the map (rebuilt on render and on restore).
+  function writeOutInfo(zoom) {
+    $('outInfo').innerHTML =
+      `<span>LAT ${S.lat}</span><span>LON ${S.lon}</span>` +
+      `<span>${S.areaKm}×${S.areaKm} km</span><span>z${zoom}</span>`;
   }
 
   // ---- locate (forward geocode a place name) ----
@@ -118,12 +137,11 @@
       lastCanvas = canvas;
       mountCanvas(canvas);
       const m = canvas._meta || {};
-      $('outInfo').innerHTML =
-        `<span>LAT ${S.lat}</span><span>LON ${S.lon}</span>` +
-        `<span>${S.areaKm}×${S.areaKm} km</span><span>z${m.zoom}</span>`;
+      writeOutInfo(m.zoom);
       $('dlBtn').disabled = false;
       setStatus(ATLAS.t('st_done'), 'ok');
       persist();
+      persistMap(canvas, m.zoom);
     } catch (e) {
       console.error(e);
       setStatus(ATLAS.t('st_render_fail'), 'warn');
@@ -145,6 +163,25 @@
     stage.appendChild(canvas);
   }
 
+  // Rebuild the last rendered map from a persisted PNG data URL so a reload
+  // brings back the working area (and re-enables export) without re-fetching
+  // tiles. No-op when nothing was stored.
+  function restoreMap(dataUrl, zoom) {
+    if (!dataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      lastCanvas = canvas;
+      mountCanvas(canvas);
+      writeOutInfo(zoom);
+      $('dlBtn').disabled = false;
+    };
+    img.src = dataUrl;
+  }
+
   // ---- export PNG ----
   function onDownload() {
     if (!lastCanvas) return;
@@ -162,12 +199,16 @@
 
   // ---- init ----
   function init() {
-    // restore persisted coords / area
+    // restore persisted coords / area + the text inputs
     const get = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
     S.lat = num(get('atlas:lat', S.lat)) ?? S.lat;
     S.lon = num(get('atlas:lon', S.lon)) ?? S.lon;
     S.areaKm = num(get('atlas:area', S.areaKm)) ?? S.areaKm;
+    S.title = get('atlas:title', S.title);
+    S.region = get('atlas:region', S.region);
+    S.center = get('atlas:center', S.center);
     writeForm();
+    restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''));
 
     $('genBtn').addEventListener('click', render);
     $('dlBtn').addEventListener('click', onDownload);
