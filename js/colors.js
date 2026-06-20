@@ -1,7 +1,7 @@
 // ATLAS — map colour palette UI. Each "color-row" in the OUTPUT panel opens a
 // shared popup (preset swatch grid + a custom OS colour picker, the same idiom
-// as chronos-ui) for one render slot: land / water / borders / frame / marker /
-// region. Picks are written to ATLAS.state.colors, persisted under atlas:* keys,
+// as chronos-ui) for one render slot: land / water / borders / frame / region.
+// Picks are written to ATLAS.state.colors, persisted under atlas:* keys,
 // and applied by re-rendering the existing map (tiles come from cache, so it's
 // quick). The renderer reads these via ATLAS.resolvePalette() in js/map.js.
 (function (ATLAS) {

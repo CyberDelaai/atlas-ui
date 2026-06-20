@@ -18,9 +18,9 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
 - **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles and
   borders from ESRI's boundary tiles; both are key-free and fetched straight onto a
   `<canvas>`, recolored to the duotone teal palette.
-- **Labels** — the centre point, region name and bottom title are auto-filled from a
+- **Labels** — the region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
-- **Colors** — recolor any map element (land, land shade, water, borders, frame, marker, region)
+- **Colors** — recolor any map element (land, land shade, water, borders, frame, region)
   from the **MAP COLORS** panel: each opens a palette popup of preset swatches plus a
   custom color picker, and the map restyles live without re-fetching tiles.
 - **Export** — one click writes a high-resolution PNG.

@@ -39,8 +39,7 @@ ATLAS.const = {
     hilight: [78, 132, 116],  // hillshade brightest -> light teal
     line:    [156, 206, 184], // country / region border lines
     frame:   [120, 178, 158], // map frame + scale bar
-    amber:   [232, 184, 64],  // center label pin (matches example districts)
-    region:  [120, 170, 150], // big faint region name
+    region:  [120, 170, 150], // seeds the bottom title tone
     title:   [207, 234, 221], // bottom title text
     bg:      [6, 14, 13],     // canvas backdrop
   },
@@ -63,7 +62,7 @@ ATLAS.const = {
     '#fcee0a', '#00f0ff', '#ff003c', '#39ff14', '#ff8800', '#c800ff',
     '#00ff9d', '#ff10f0', '#ff6b6b', '#ff9f43', '#feca57', '#1dd1a1',
     '#00d2d3', '#54a0ff', '#a29bfe', '#cd84f1', '#ff9ff3', '#ffffff',
-    '#4e8474', '#092840', '#9cceb8', '#78b29e', '#e8b840', '#78aa96',
+    '#4e8474', '#092840', '#9cceb8', '#78b29e', '#78aa96',
   ],
 };
 
@@ -89,8 +88,6 @@ ATLAS.state = {
   areaKmW: 40,      // width of the rectangular area of interest, in km
   areaKmH: 40,      // height of the rectangular area of interest, in km
   title: '',        // bottom title strip (auto-filled from geocode, editable)
-  region: '',       // big faint region name (auto-filled, editable)
-  center: '',       // amber center-point label (auto-filled, editable)
   rendering: false, // guard against overlapping renders
 
   // User-pickable map colours (hex). Each drives one element of the render;
@@ -102,8 +99,7 @@ ATLAS.state = {
     water:  '#092840', // sea / lakes (deep tone; ramp + waves derived)
     border: '#9cceb8', // country / region border lines
     frame:  '#78b29e', // map frame + scale bar
-    marker: '#e8b840', // amber centre pin + label
-    region: '#78aa96', // big faint region name (seeds the title tone too)
+    region: '#78aa96', // seeds the bottom title tone
   },
   // Last custom (non-preset) pick per slot, so the palette popup can re-offer it.
   customColors: {},

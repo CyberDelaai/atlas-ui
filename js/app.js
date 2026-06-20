@@ -36,9 +36,6 @@
   function pickCenter(a) {
     return a && (a.city || a.town || a.village || a.suburb || a.county || a.state) || '';
   }
-  function pickRegion(a) {
-    return a && (a.state || a.region || a.province || a.country) || '';
-  }
 
   // ---- state <-> form sync ----
   const clampKm = (n) => Math.min(Math.max(n, 1), 600);
@@ -49,8 +46,6 @@
     if (w && w > 0) S.areaKmW = clampKm(w);
     if (h && h > 0) S.areaKmH = clampKm(h);
     S.title = $('titleInput').value.trim();
-    S.region = $('regionInput').value.trim();
-    S.center = $('centerInput').value.trim();
   }
   function writeForm() {
     $('latInput').value = S.lat;
@@ -58,8 +53,6 @@
     $('areaInputW').value = S.areaKmW;
     $('areaInputH').value = S.areaKmH;
     $('titleInput').value = S.title;
-    $('regionInput').value = S.region;
-    $('centerInput').value = S.center;
   }
   function persist() {
     ATLAS.save('atlas:lat', S.lat);
@@ -67,8 +60,6 @@
     ATLAS.save('atlas:areaW', S.areaKmW);
     ATLAS.save('atlas:areaH', S.areaKmH);
     ATLAS.save('atlas:title', S.title);
-    ATLAS.save('atlas:region', S.region);
-    ATLAS.save('atlas:center', S.center);
   }
   // Persist the rendered map itself (PNG data URL) plus the zoom shown in the
   // output readout, so a reload restores the whole working area, not just the
@@ -98,9 +89,6 @@
       if (!hit) { setStatus(ATLAS.t('st_not_found'), 'warn'); return; }
       S.lat = +parseFloat(hit.lat).toFixed(5);
       S.lon = +parseFloat(hit.lon).toFixed(5);
-      const a = hit.address || {};
-      S.center = pickCenter(a) || hit.name || q;
-      S.region = pickRegion(a);
       S.title = (hit.display_name || q).split(',').slice(0, 2).join(',').trim();
       writeForm();
       persist();
@@ -116,16 +104,14 @@
     readForm();
     if (S.lat == null || S.lon == null) { setStatus(ATLAS.t('st_need_coords'), 'warn'); return; }
 
-    // auto-fill names from a reverse lookup if the user left them blank
-    if (!S.center && !S.region) {
+    // auto-fill the title from a reverse lookup if the user left it blank
+    if (!S.title) {
       try {
         const rv = await reverse(S.lat, S.lon);
         const a = (rv && rv.address) || {};
-        if (!S.center) S.center = pickCenter(a);
-        if (!S.region) S.region = pickRegion(a);
-        if (!S.title) S.title = S.center ? `${S.center}` : '';
+        S.title = pickCenter(a);
         writeForm();
-      } catch (e) { /* names are optional — carry on */ }
+      } catch (e) { /* the title is optional — carry on */ }
     }
 
     S.rendering = true;
@@ -135,7 +121,7 @@
     try {
       const canvas = await ATLAS.renderMap({
         lat: S.lat, lon: S.lon, areaKmW: S.areaKmW, areaKmH: S.areaKmH,
-        title: S.title, region: S.region, center: S.center,
+        title: S.title,
         onProgress: (d, t) => setStatus(ATLAS.t('st_loading') + ` ${d}/${t}`),
       });
       lastCanvas = canvas;
@@ -198,7 +184,7 @@
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const tag = (S.center || 'map').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const tag = (S.title || 'map').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       a.href = url;
       a.download = `atlas-${tag || 'map'}-${S.areaKmW}x${S.areaKmH}km.png`;
       a.click();
@@ -217,8 +203,6 @@
     S.areaKmW = num(get('atlas:areaW', oldArea ?? S.areaKmW)) ?? S.areaKmW;
     S.areaKmH = num(get('atlas:areaH', oldArea ?? S.areaKmH)) ?? S.areaKmH;
     S.title = get('atlas:title', S.title);
-    S.region = get('atlas:region', S.region);
-    S.center = get('atlas:center', S.center);
     writeForm();
     restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''));
 

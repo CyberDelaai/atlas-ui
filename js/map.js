@@ -4,8 +4,8 @@
 //
 // Pipeline: coords + area -> Web-Mercator tile range -> stitch ESRI hillshade
 // tiles -> recolor to the teal duotone -> composite ESRI country/region borders
-// as light lines -> draw the rectangular frame, region name, center pin, title
-// and scale bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
+// as light lines -> draw the rectangular frame, title and scale
+// bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
 (function (ATLAS) {
   'use strict';
   const C = ATLAS.const;
@@ -118,7 +118,6 @@
         hilight: land,                             // land ramp: light end (the pick)
         line:    cc.border ? A(cc.border) : D.line,
         frame:   cc.frame  ? A(cc.frame)  : D.frame,
-        amber:   cc.marker ? A(cc.marker) : D.amber,
         region:  region,
         title:   _mix(region, [236, 247, 240], 0.62), // bottom title: lightened region
         bg:      D.bg,
@@ -344,42 +343,7 @@
     ctx.restore();
   }
 
-  // Amber center pin + label, marking the entered coordinates (map centre).
-  function drawCenterPin(ctx, cx, cy, text, col) {
-    ctx.save();
-    ctx.strokeStyle = rgb(col, 0.95);
-    ctx.fillStyle = rgb(col, 0.95);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, 1.4, 0, Math.PI * 2); ctx.fill();
-    if (text) {
-      ctx.font = "700 15px 'JetBrains Mono', monospace";
-      const label = text.toUpperCase();
-      const w = ctx.measureText(label).width;
-      const bx = cx + 10, by = cy - 9, pad = 6, bh = 18;
-      ctx.fillStyle = rgb(C.COL.bg, 0.6);
-      ctx.fillRect(bx, by, w + pad * 2, bh);
-      ctx.strokeStyle = rgb(col, 0.9);
-      ctx.lineWidth = 1;
-      ctx.strokeRect(bx + 0.5, by + 0.5, w + pad * 2 - 1, bh - 1);
-      ctx.fillStyle = rgb(col, 1);
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, bx + pad, by + bh / 2 + 1);
-    }
-    ctx.restore();
-  }
-
-  // Big faint region name across the top, letter-spaced like the example.
-  function drawRegionName(ctx, x, y, text, col) {
-    if (!text) return;
-    ctx.save();
-    ctx.font = "500 30px 'JetBrains Mono', monospace";
-    ctx.fillStyle = rgb(col, 0.28);
-    ctx.textBaseline = 'top';
-    const spaced = text.toUpperCase().split('').join(' ');
-    ctx.fillText(spaced, x + 26, y + 22);
-    ctx.restore();
-  }
+  // (region name label removed - the bottom title is the only on-map label)
 
   // ---- scale bar -------------------------------------------------------------
   function niceScale(areaKm) {
@@ -430,7 +394,7 @@
   }
 
   // ---- public: render the whole thing ---------------------------------------
-  // opts: { lat, lon, areaKmW, areaKmH, title, region, center, onProgress(done,total) }
+  // opts: { lat, lon, areaKmW, areaKmH, title, onProgress(done,total) }
   ATLAS.renderMap = async function renderMap(opts) {
     const pad = C.PAD, strip = C.STRIP;
     const { mapW, mapH } = fitMapPx(opts.areaKmW, opts.areaKmH);
@@ -488,8 +452,6 @@
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(mapCv, pad, pad);
 
-    drawRegionName(ctx, pad, pad, opts.region, COL.region);
-    drawCenterPin(ctx, pad + mapW / 2, pad + mapH / 2, opts.center, COL.amber);
     drawFrame(ctx, pad, pad, mapW, mapH, COL.frame);
 
     // bottom strip: title (left) + scale bar (right)
