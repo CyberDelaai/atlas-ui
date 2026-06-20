@@ -1,0 +1,9 @@
+# Jekyll config for GitHub Pages.
+# The site is a static SPA; we only need Jekyll for the `exclude:` list so
+# certain files stay in git but aren't copied into the deployed site.
+
+exclude:
+  - LICENSE
+  - README.md
+  - TODO.md
+  - bump_version.py

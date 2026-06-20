@@ -1,0 +1,169 @@
+  :root {
+    --yellow: #fcee0a;
+    --cyan: #00f0ff;
+    --magenta: #ff003c;
+    --bg: #050507;
+    --panel: #0b0b10;
+    --panel-2: #14141c;
+    --text: #e8e8ee;
+    --dim: #7a7a88;
+    --accent: #fcee0a;
+    --accent-rgb: 252,238,10;
+    --main: #00f0ff;
+    --main-rgb: 0,240,255;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 28px 18px 64px;
+    background-image: repeating-linear-gradient(0deg, rgba(var(--main-rgb),0.03) 0 1px, transparent 1px 3px);
+  }
+  .app { max-width: 1800px; margin: 0 auto; }
+
+  /* ---------- Header (shared across cyberdeck.tools apps) ---------- */
+  header.top {
+    display: flex; align-items: center; gap: 18px;
+    border-bottom: 1px solid rgba(252,238,10,0.25); padding-bottom: 16px; margin-bottom: 22px;
+  }
+  .logo-menu { position: relative; }
+  .logo {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--yellow); font-size: 22px; letter-spacing: 2px; font-weight: 700;
+    background: none; border: none; cursor: pointer; transition: filter .15s;
+  }
+  .logo:hover { filter: drop-shadow(0 0 6px rgba(var(--accent-rgb),0.6)); }
+  .logo .chev { display: inline-block; transition: transform .2s ease; }
+  .logo[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .tag {
+    color: var(--cyan); font-size: 12px; letter-spacing: 1px;
+    border-left: 1px solid var(--dim); padding-left: 18px;
+  }
+  .tag .tag-meta { cursor: default; color: var(--cyan); }
+  .lang-select {
+    background: var(--panel); color: var(--main);
+    border: 1px solid rgba(var(--main-rgb),0.4);
+    padding: 6px 10px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; cursor: pointer;
+  }
+  header.top .lang-select { margin-left: auto; }
+  .app-menu {
+    position: absolute; top: calc(100% + 12px); left: 0; z-index: 30;
+    display: flex; flex-direction: column; gap: 4px;
+    min-width: 240px; padding: 12px 14px;
+    background: var(--panel);
+    --aug-border-all: 1px; --aug-border-bg: rgba(var(--main-rgb),0.5);
+    --aug-tl: 10px; --aug-br: 10px;
+  }
+  .app-menu[hidden] { display: none; }
+  .app-menu-item {
+    font-size: 16px; letter-spacing: 2px;
+    color: var(--yellow); text-decoration: none; white-space: nowrap;
+    padding: 6px 8px; transition: color .12s, background .12s;
+  }
+  .app-menu-item:hover { background: rgba(var(--main-rgb),0.12); color: var(--accent); }
+  .app-menu-item.current { color: var(--main); cursor: default; }
+  .app-menu-item.current:hover { background: none; }
+  .glitchable { display: inline-block; white-space: pre; }
+  .glitchable.glitching {
+    color: var(--yellow);
+    text-shadow: 2px 0 var(--cyan), -2px 0 var(--magenta);
+    animation: tagGlitchJitter 0.08s steps(2) infinite;
+  }
+  @keyframes tagGlitchJitter {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-1px, 1px); }
+    50% { transform: translate(1px, -1px); }
+    75% { transform: translate(-1px, -1px); }
+  }
+
+  /* ---------- Layout: config left + right, working area center ---------- */
+  .layout { display: flex; gap: 22px; align-items: stretch; }
+  .config {
+    width: 340px; flex-shrink: 0; padding: 16px 16px 22px;
+    background: var(--panel);
+    --aug-border-all: 1px; --aug-border-bg: rgba(var(--main-rgb),0.35);
+    --aug-tl: 12px; --aug-br: 12px;
+    align-self: flex-start;
+  }
+  .config h2 {
+    font-size: 13px; letter-spacing: 2px; color: var(--dim);
+    text-transform: uppercase; font-weight: 700; margin-bottom: 12px;
+  }
+  .config .hint { color: var(--dim); font-size: 12px; line-height: 1.6; }
+
+  /* shared primary button (augmented-ui clipped corners) */
+  .btn {
+    --btn-color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 44px; padding: 0 16px;
+    background: transparent; color: var(--btn-color);
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 1;
+    letter-spacing: 3px; text-transform: uppercase; cursor: pointer; border: none;
+    transition: background .15s, color .15s, box-shadow .15s, opacity .15s;
+    --aug-border-all: 1px; --aug-border-bg: var(--btn-color);
+    --aug-inlay-all: 0px; --aug-inlay-bg: transparent;
+    --aug-tl: 12px; --aug-br: 12px;
+  }
+  .btn:hover { background: color-mix(in srgb, var(--btn-color) 22%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--btn-color) 45%, transparent); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; background: transparent; box-shadow: none; }
+
+  /* shared sliding two-state toggle */
+  .fx-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+  .fx-label { font-size: 12px; letter-spacing: 1.5px; color: var(--main); text-transform: uppercase; }
+  .side-switch {
+    position: relative; height: 30px; width: 112px; background: var(--panel);
+    border: 1px solid rgba(var(--main-rgb), 0.3); cursor: pointer;
+    display: flex; align-items: stretch; overflow: hidden; flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace; transition: border-color .15s;
+  }
+  .side-switch:hover { border-color: var(--main); }
+  .side-switch .thumb {
+    position: absolute; top: 0; left: 0; width: 50%; height: 100%;
+    background: color-mix(in srgb, var(--main) 22%, transparent);
+    transition: transform .22s cubic-bezier(.4, 0, .2, 1); z-index: 0;
+  }
+  .side-switch[data-pos="right"] .thumb { transform: translateX(100%); }
+  .side-switch .lab {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; z-index: 1; position: relative;
+    pointer-events: none; white-space: nowrap; color: var(--dim); transition: color .15s .08s;
+  }
+  .side-switch[data-pos="left"] .lab.l,
+  .side-switch[data-pos="right"] .lab.r { color: var(--main); }
+  .fx-toggle.disabled { opacity: .4; pointer-events: none; }
+
+  /* faded-edge cyan horizontal divider between config sections */
+  .divider {
+    border: none; height: 1px; margin: 18px 0;
+    background: linear-gradient(90deg, transparent, rgba(var(--main-rgb),0.55), transparent);
+  }
+
+  /* ---------- Center working area ---------- */
+  .workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .stage {
+    flex: 1; min-height: max(440px, calc(100vh - 220px)); position: relative;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px dashed rgba(var(--main-rgb),0.35);
+    background: repeating-linear-gradient(45deg, rgba(var(--main-rgb),0.03) 0 12px, transparent 12px 24px);
+    color: var(--dim); text-align: center; overflow: hidden;
+  }
+  .stage .placeholder { padding: 24px; font-size: 14px; letter-spacing: 1px; line-height: 1.8; }
+  .stage .placeholder b { color: var(--main); font-size: 18px; letter-spacing: 3px; }
+
+  @media (max-width: 1100px) {
+    .layout { flex-wrap: wrap; }
+    .config { width: 100%; }
+    .workspace { order: -1; width: 100%; }
+  }
+
+  /* faint fixed footer stamp (shared across cyberdeck.tools apps) */
+  .footer-stamp {
+    position: fixed; left: 0; right: 0; bottom: 6px; z-index: 0;
+    text-align: center; font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.15); pointer-events: none; user-select: none;
+  }

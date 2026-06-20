@@ -1,0 +1,115 @@
+<!-- ATLAS v0.1.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ATLAS — cyberdeck.tools</title>
+<meta name="description" content="ATLAS is a free in-browser tool from cyberdeck.tools. Runs entirely client-side — no backend, no build step." />
+<meta name="keywords" content="cyberpunk, atlas, ttrpg, gm tools, cyberdeck, vtt, browser tool" />
+<meta name="author" content="CyberDelaai" />
+<meta name="robots" content="index, follow" />
+<meta name="theme-color" content="#050507" />
+<link rel="canonical" href="https://cyberdeck.tools/atlas-ui/" />
+<!-- SVG-first: modern browsers use the SVG for the tab; .ico is the fallback -->
+<link rel="icon" href="favicon.ico" sizes="32x32" />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="apple-touch-icon" href="favicon-192.png" />
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ATLAS" />
+<meta property="og:title" content="ATLAS — cyberdeck.tools" />
+<meta property="og:description" content="A free in-browser cyberdeck.tools utility. Runs entirely client-side." />
+<meta property="og:url" content="https://cyberdeck.tools/atlas-ui/" />
+<meta property="og:image" content="https://cyberdeck.tools/atlas-ui/atlas_thumbnail.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="ATLAS — cyberdeck.tools preview" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="ATLAS — cyberdeck.tools" />
+<meta name="twitter:description" content="A free in-browser cyberdeck.tools utility." />
+<meta name="twitter:image" content="https://cyberdeck.tools/atlas-ui/atlas_thumbnail.png" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "ATLAS",
+  "description": "A free in-browser utility from cyberdeck.tools. Runs entirely client-side with no backend or build step.",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Any (browser-based)",
+  "browserRequirements": "Modern desktop browser",
+  "url": "https://cyberdeck.tools/atlas-ui/",
+  "author": {
+    "@type": "Person",
+    "name": "CyberDelaai"
+  },
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/augmented-ui@2/augmented-ui.min.css" />
+
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="sr-only">ATLAS — cyberdeck.tools utility</h1>
+    <div class="logo-menu">
+      <button class="logo" id="logoBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu"><span class="chev" aria-hidden="true">&gt;</span> ATLAS_</button>
+      <nav class="app-menu" id="appMenu" data-augmented-ui="tl-clip br-clip border" aria-label="cyberdeck.tools navigation" hidden>
+        <a class="app-menu-item" href="https://cyberdeck.tools/">/ CYBERDECK_TOOLS</a>
+        <a class="app-menu-item" href="https://cyberdeck.tools/commlink-ui/">&gt; COMMLINK_</a>
+        <a class="app-menu-item" href="https://cyberdeck.tools/chronos-ui/">&gt; CHRONOS_</a>
+        <a class="app-menu-item" href="https://cyberdeck.tools/gridmap-ui/">&gt; GRIDMAP_</a>
+        <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
+      </nav>
+    </div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.1.0</span></span></div>
+    <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
+  </header>
+
+  <div class="layout">
+    <!-- LEFT config -->
+    <aside class="config config-left" data-augmented-ui="tl-clip br-clip border">
+      <h2 data-i18n="h_controls">// CONTROLS</h2>
+      <p class="hint" data-i18n="placeholder_left">Left control panel — start building here.</p>
+    </aside>
+
+    <!-- CENTER working area -->
+    <main class="workspace">
+      <div class="stage" id="stage">
+        <div class="placeholder">
+          <b data-i18n="ph_title">ATLAS</b><br />
+          <span data-i18n="ph_sub">blank scaffold — ready to build</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- RIGHT config -->
+    <aside class="config config-right" data-augmented-ui="tl-clip br-clip border">
+      <h2 data-i18n="h_output">// OUTPUT</h2>
+      <p class="hint" data-i18n="placeholder_right">Right output panel — start building here.</p>
+    </aside>
+  </div>
+</div>
+
+<div class="footer-stamp" aria-hidden="true">ATLAS (c) // 2026 // CYBERDELAAI // MIT</div>
+
+<script defer src="js/state.js"></script>
+<script defer src="js/i18n.js"></script>
+<script defer src="js/header.js"></script>
+<script defer src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.2" result="b1"/>
+      <feGaussianBlur stdDeviation="3" result="b2"/>
+      <feGaussianBlur stdDeviation="6" result="b3"/>
+      <feMerge>
+        <feMergeNode in="b3"/>
+        <feMergeNode in="b2"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- clip the inner lattice so the meridians/latitudes don't poke past the globe -->
+    <clipPath id="globe"><circle cx="32" cy="32" r="19"/></clipPath>
+  </defs>
+  <rect width="64" height="64" fill="#000"/>
+  <!-- ATLAS: a stylised globe / meridian sphere -->
+  <g filter="url(#glow)" fill="none" stroke="#fcee0a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="32" r="19"/>
+    <g clip-path="url(#globe)">
+      <ellipse cx="32" cy="32" rx="8" ry="19"/>
+      <line x1="13" y1="32" x2="51" y2="32"/>
+      <line x1="16" y1="21" x2="48" y2="21"/>
+      <line x1="16" y1="43" x2="48" y2="43"/>
+    </g>
+  </g>
+</svg>
