@@ -355,14 +355,23 @@
   }
   function fmtKm(n) { return (n % 1 === 0 ? n.toString() : n.toFixed(1)); }
 
-  function drawScaleBar(ctx, rightX, baseY, mapW, areaKmW, col) {
+  // Draws the scale bar so its whole block (number row above + bar below)
+  // is vertically centred on `cy`, and its rightmost ink (the trailing "km"
+  // label) ends at `rightX` — so it mirrors the title's left margin instead of
+  // letting "km" spill into the page margin.
+  function drawScaleBar(ctx, rightX, cy, mapW, areaKmW, col) {
     const total = niceScale(areaKmW);
     const pxPerKm = mapW / areaKmW;
     const barW = total * pxPerKm;
     const segs = 4, segW = barW / segs, h = 6;
-    const x = rightX - barW, y = baseY;
     ctx.save();
     ctx.font = "500 11px 'JetBrains Mono', monospace";
+    const labelH = 11, labelGap = 4;        // number row sits above the bar
+    const blockH = labelH + labelGap + h;
+    const labelBase = Math.round(cy - blockH / 2) + labelH; // baseline of numbers
+    const y = labelBase + labelGap;         // top of the bar
+    const kmGap = 6, kmW = ctx.measureText('km').width;
+    const x = rightX - kmW - kmGap - barW;  // reserve room for the "km" label
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'center';
     for (let i = 0; i < segs; i++) {
@@ -374,10 +383,10 @@
     ctx.strokeRect(x + 0.5, y + 0.5, barW - 1, h - 1);
     ctx.fillStyle = rgb(col, 0.95);
     for (let i = 0; i <= segs; i++) {
-      ctx.fillText(fmtKm(total / segs * i), x + i * segW, y - 4);
+      ctx.fillText(fmtKm(total / segs * i), x + i * segW, labelBase);
     }
     ctx.textAlign = 'left';
-    ctx.fillText('km', x + barW + 6, y - 4);
+    ctx.fillText('km', x + barW + kmGap, labelBase);
     ctx.restore();
   }
 
@@ -446,7 +455,10 @@
     await (document.fonts && document.fonts.ready);
     const out = document.createElement('canvas');
     out.width = mapW + pad * 2;
-    out.height = mapH + pad * 2 + strip;
+    // top margin (pad) + map + bottom margin (pad) + label row (strip) + a final
+    // margin (pad) below the row, so the label sits between equal PAD margins
+    // instead of floating below an oversized strip.
+    out.height = mapH + pad * 3 + strip;
     const ctx = out.getContext('2d');
     ctx.fillStyle = rgb(COL.bg, 1);
     ctx.fillRect(0, 0, out.width, out.height);
@@ -454,17 +466,19 @@
 
     drawFrame(ctx, pad, pad, mapW, mapH, COL.frame);
 
-    // bottom strip: title (left) + scale bar (right)
-    const baseY = mapH + pad * 2 + strip / 2 + 4;
+    // bottom strip: title (left) + scale bar (right), both vertically centred
+    // on the strip's mid-line so they read as one balanced row, with the title
+    // and scale bar aligned to the map's left and right edges respectively.
+    const cy = mapH + pad * 2 + strip / 2;
     if (opts.title) {
       ctx.save();
       ctx.font = "500 18px 'JetBrains Mono', monospace";
       ctx.fillStyle = rgb(COL.title, 0.95);
       ctx.textBaseline = 'middle';
-      ctx.fillText(opts.title.toUpperCase(), pad, baseY);
+      ctx.fillText(opts.title.toUpperCase(), pad, cy + 1);
       ctx.restore();
     }
-    drawScaleBar(ctx, pad + mapW, baseY + 6, mapW, opts.areaKmW, COL.frame);
+    drawScaleBar(ctx, pad + mapW, cy, mapW, opts.areaKmW, COL.frame);
 
     out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW) };
     return out;

@@ -24,7 +24,7 @@ ATLAS.const = {
   MAX_ZOOM: 16,    // ESRI hillshade detail cap
   MAP_SIZE: 1024,  // longer rendered map edge, in px (export resolution)
   PAD: 30,         // canvas margin around the map
-  STRIP: 64,       // bottom title/scale strip height
+  STRIP: 24,       // bottom title/scale label-row height (sits between equal PAD margins)
 
   // Directional relief light applied across the land in the duotone pass: the
   // terrain is brightened toward AZIMUTH and darkened toward the opposite side,

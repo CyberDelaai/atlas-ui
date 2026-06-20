@@ -19,3 +19,5 @@ Items are removed from the list once they are implemented / resolved (no archive
    cleaner boundaries-only source (or a label mask) for crisper borders.
 4. Localize the transient status lines (`st_*` in `js/i18n.js`) — currently EN-only
    via fallback, while all other UI strings are translated.
+5. Ability to recrop map, (+)/(-) zoom controls
+6. Roll 20 advice on cells count and scale to match map's
