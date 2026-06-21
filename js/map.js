@@ -361,7 +361,19 @@
   function tracePolylines(mask, w, h) {
     const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : mask[y * w + x];
     const NB = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
-    const deg = (x, y) => { let d = 0; for (const [dx, dy] of NB) d += at(x + dx, y + dy); return d; };
+    // Whether (x,y) genuinely links to its neighbour at (dx,dy). A diagonal step
+    // is dropped when an orthogonal pixel already bridges the same two cells: in a
+    // raster staircase, (x,y)->(x+1,y)->(x+1,y+1) also carries the redundant
+    // diagonal chord (x,y)->(x+1,y+1). Counting that chord makes straight diagonals
+    // read as junctions (fragmenting lines) and lets the walk cut the corner,
+    // leaving orphan pixels that pass 2 re-traces into spurious little loops. The
+    // test is symmetric, so deg() and the walk see the same graph.
+    const linked = (x, y, dx, dy) => {
+      if (!at(x + dx, y + dy)) return false;
+      if (dx && dy && (at(x + dx, y) || at(x, y + dy))) return false;
+      return true;
+    };
+    const deg = (x, y) => { let d = 0; for (const [dx, dy] of NB) if (linked(x, y, dx, dy)) d++; return d; };
     const seen = new Set();
     const key = (a, b) => a < b ? a * mask.length + b : b * mask.length + a;
     const lines = [];
@@ -373,8 +385,8 @@
       while (true) {
         let nx = -1, ny = -1;
         for (const [dx, dy] of NB) {
+          if (!linked(cx, cy, dx, dy)) continue;
           const x = cx + dx, y = cy + dy;
-          if (!at(x, y)) continue;
           const k = key(cy * w + cx, y * w + x);
           if (seen.has(k)) continue;
           seen.add(k); nx = x; ny = y; break;
@@ -388,8 +400,8 @@
 
     const startFrom = (x, y) => {
       for (const [dx, dy] of NB) {
+        if (!linked(x, y, dx, dy)) continue;
         const nx = x + dx, ny = y + dy;
-        if (!at(nx, ny)) continue;
         const k = key(y * w + x, ny * w + nx);
         if (seen.has(k)) continue;
         seen.add(k);
