@@ -170,6 +170,24 @@
     zout.disabled = S.areaKmW >= 600 && S.areaKmH >= 600;
   }
 
+  // ---- pan (recenter) ----
+  // The four arrows nudge the captured centre N/S/E/W by a fraction of the
+  // visible area and re-render. A degree of longitude shrinks with latitude, so
+  // the east/west step is scaled by cos(lat); north/south is constant.
+  const PAN_STEP = 0.3; // fraction of the visible edge moved per click
+  function panBy(dx, dy) {
+    if (S.rendering || !lastCanvas) return;
+    readForm();
+    const cl = Math.cos(S.lat * Math.PI / 180) || 1;
+    const dLon = dx * PAN_STEP * S.areaKmW * 1000 / (111320 * cl);
+    const dLat = dy * PAN_STEP * S.areaKmH * 1000 / 111320;
+    S.lat = +clamp(S.lat + dLat, -85, 85).toFixed(5);
+    S.lon = +clamp(S.lon + dLon, -180, 180).toFixed(5);
+    writeForm();
+    persist();
+    render();
+  }
+
   // ---- draw-to-recrop -------------------------------------------------------
   // A toggle in the zoom cluster lets the user rubber-band a rectangle straight
   // on the rendered map; on release we convert that box (via the view geometry
@@ -334,6 +352,10 @@
     $('dlBtn').addEventListener('click', onDownload);
     $('zoomInBtn').addEventListener('click', () => zoomBy(1 / ZOOM_STEP));
     $('zoomOutBtn').addEventListener('click', () => zoomBy(ZOOM_STEP));
+    $('panUpBtn').addEventListener('click', () => panBy(0, 1));
+    $('panDownBtn').addEventListener('click', () => panBy(0, -1));
+    $('panLeftBtn').addEventListener('click', () => panBy(-1, 0));
+    $('panRightBtn').addEventListener('click', () => panBy(1, 0));
     $('cropBtn').addEventListener('click', () => setCropMode(!cropping));
     $('stage').addEventListener('pointerdown', onCropDown);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cropping) setCropMode(false); });

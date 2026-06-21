@@ -195,7 +195,7 @@
   /* recrop / zoom controls overlaid on the map (top-right of the stage) */
   .zoom-ctl {
     position: absolute; top: 14px; right: 14px; z-index: 5;
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
   }
   .zoom-ctl[hidden] { display: none; }
   .zoom-btn {
@@ -211,6 +211,19 @@
   .zoom-btn:hover { background: color-mix(in srgb, var(--main) 24%, rgba(11,11,16,0.82)); box-shadow: 0 0 12px rgba(var(--main-rgb),0.45); }
   .zoom-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
   .crop-btn svg { width: 20px; height: 20px; display: block; }
+  /* directional pan pad: a 3x3 grid with arrows on the edges, centre empty */
+  .pan-pad {
+    display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px);
+    gap: 4px; margin-top: 4px;
+  }
+  .pan-btn { font-size: 20px; --aug-tl: 6px; --aug-br: 6px; }
+  .pan-tl     { grid-area: 1 / 1; }
+  .pan-up     { grid-area: 1 / 2; }
+  .pan-tr     { grid-area: 1 / 3; }
+  .pan-left   { grid-area: 2 / 1; }
+  .pan-center { grid-area: 2 / 2; }
+  .pan-right  { grid-area: 2 / 3; }
+  .pan-down   { grid-area: 3 / 2; }
   /* the draw-region toggle reads as "armed" while active */
   .crop-btn[aria-pressed="true"] {
     background: var(--main); color: rgba(11,11,16,0.95);

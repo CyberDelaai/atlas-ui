@@ -13,6 +13,7 @@
       c_frame: 'FRAME', c_region: 'REGION', t_pick: 'Pick any color',
       t_zoom_in: 'Zoom in — recrop tighter', t_zoom_out: 'Zoom out — recrop wider',
       t_crop: 'Draw a region to recrop',
+      t_pan_up: 'Pan north', t_pan_down: 'Pan south', t_pan_left: 'Pan west', t_pan_right: 'Pan east',
       hint_output: 'Free ESRI hillshade terrain + country / region borders, recolored to the cyberdeck palette. Runs entirely in your browser.',
       ph_title: 'ATLAS', ph_sub: 'enter coordinates and render a map',
       tag: 'ATLAS', tag_alt: 'OFF THE MAP',

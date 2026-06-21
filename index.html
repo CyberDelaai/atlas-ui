@@ -1,4 +1,4 @@
-<!-- ATLAS v0.2.10 -->
+<!-- ATLAS v0.2.11 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.10</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.11</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -138,9 +138,17 @@
         <!-- recrop / zoom controls: scale the captured km area around the centre
              and re-render. Hidden until a map exists. -->
         <div class="zoom-ctl" id="zoomCtl" hidden>
-          <button class="zoom-btn crop-btn" id="cropBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-pressed="false" aria-label="Draw a region to recrop" title="Draw a region to recrop" data-i18n-title="t_crop"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M680-280v-280H400v-80h280q33 0 56.5 23.5T760-560v280h-80Zm0 200v-120H240q-33 0-56.5-23.5T160-280v-440H40v-80h120v-120h80v640h640v80H680Z"/></svg></button>
-          <button class="zoom-btn" id="zoomInBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Zoom in" title="Zoom in — recrop tighter" data-i18n-title="t_zoom_in">+</button>
-          <button class="zoom-btn" id="zoomOutBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Zoom out" title="Zoom out — recrop wider" data-i18n-title="t_zoom_out">&minus;</button>
+          <!-- pan pad: nudge the captured centre N/S/E/W by a fraction of the area;
+               zoom +/- fill the top corners and the recrop toggle the centre cell -->
+          <div class="pan-pad">
+            <button class="zoom-btn pan-tl" id="zoomInBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Zoom in" title="Zoom in — recrop tighter" data-i18n-title="t_zoom_in">+</button>
+            <button class="zoom-btn pan-tr" id="zoomOutBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Zoom out" title="Zoom out — recrop wider" data-i18n-title="t_zoom_out">&minus;</button>
+            <button class="zoom-btn pan-btn pan-up" id="panUpBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Pan north" title="Pan north" data-i18n-title="t_pan_up">&uarr;</button>
+            <button class="zoom-btn pan-btn pan-left" id="panLeftBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Pan west" title="Pan west" data-i18n-title="t_pan_left">&larr;</button>
+            <button class="zoom-btn crop-btn pan-center" id="cropBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-pressed="false" aria-label="Draw a region to recrop" title="Draw a region to recrop" data-i18n-title="t_crop"><svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M680-280v-280H400v-80h280q33 0 56.5 23.5T760-560v280h-80Zm0 200v-120H240q-33 0-56.5-23.5T160-280v-440H40v-80h120v-120h80v640h640v80H680Z"/></svg></button>
+            <button class="zoom-btn pan-btn pan-right" id="panRightBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Pan east" title="Pan east" data-i18n-title="t_pan_right">&rarr;</button>
+            <button class="zoom-btn pan-btn pan-down" id="panDownBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Pan south" title="Pan south" data-i18n-title="t_pan_down">&darr;</button>
+          </div>
         </div>
         <!-- rubber-band rectangle shown while drawing a recrop region -->
         <div class="crop-sel" id="cropSel" hidden></div>
