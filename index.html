@@ -1,4 +1,4 @@
-<!-- ATLAS v0.2.8 -->
+<!-- ATLAS v0.2.9 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.8</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.9</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -134,6 +134,12 @@
         <div class="placeholder">
           <b data-i18n="ph_title">ATLAS</b><br />
           <span data-i18n="ph_sub">enter coordinates and render a map</span>
+        </div>
+        <!-- recrop / zoom controls: scale the captured km area around the centre
+             and re-render. Hidden until a map exists. -->
+        <div class="zoom-ctl" id="zoomCtl" hidden>
+          <button class="zoom-btn" id="zoomInBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Zoom in" title="Zoom in — recrop tighter" data-i18n-title="t_zoom_in">+</button>
+          <button class="zoom-btn" id="zoomOutBtn" type="button" data-augmented-ui="tl-clip br-clip border" aria-label="Zoom out" title="Zoom out — recrop wider" data-i18n-title="t_zoom_out">&minus;</button>
         </div>
       </div>
     </main>

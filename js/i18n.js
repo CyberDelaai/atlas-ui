@@ -11,6 +11,7 @@
       b_render: 'RENDER MAP', b_export: 'EXPORT PNG',
       l_colors: 'MAP COLORS', c_land: 'LAND', c_landshade: 'LAND SHADE', c_water: 'WATER', c_border: 'BORDERS',
       c_frame: 'FRAME', c_region: 'REGION', t_pick: 'Pick any color',
+      t_zoom_in: 'Zoom in — recrop tighter', t_zoom_out: 'Zoom out — recrop wider',
       hint_output: 'Free ESRI hillshade terrain + country / region borders, recolored to the cyberdeck palette. Runs entirely in your browser.',
       ph_title: 'ATLAS', ph_sub: 'enter coordinates and render a map',
       tag: 'ATLAS', tag_alt: 'OFF THE MAP',

@@ -15,6 +15,8 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
 
 - **Coordinates + area** — type a latitude / longitude and the area's width and
   height in km, or use **FIND PLACE** to geocode a name into coordinates.
+- **Recrop / zoom** — the **+ / −** controls on the map recrop it around the same
+  centre (zoom in for more detail, out for a wider view) and re-render.
 - **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles and
   borders from ESRI's boundary tiles; both are key-free and fetched straight onto a
   `<canvas>`, recolored to the duotone teal palette.

@@ -53,6 +53,7 @@
     $('areaInputW').value = S.areaKmW;
     $('areaInputH').value = S.areaKmH;
     $('titleInput').value = S.title;
+    updateZoomBtns();
   }
   function persist() {
     ATLAS.save('atlas:lat', S.lat);
@@ -142,6 +143,33 @@
     }
   }
 
+  // ---- recrop / zoom ----
+  // Each step scales the captured km area (both edges, so the aspect ratio is
+  // kept) around the same centre and re-renders: zooming in shrinks the box for
+  // more detail, zooming out grows it. STEP is the per-click multiplier.
+  const ZOOM_STEP = 1.5;
+  function zoomBy(factor) {
+    if (S.rendering || !lastCanvas) return;
+    readForm();
+    // Clamp the factor so neither edge leaves [1, 600] km, preserving aspect:
+    // the larger edge can't exceed 600, the smaller can't drop below 1.
+    let f = Math.min(factor, 600 / Math.max(S.areaKmW, S.areaKmH));
+    f = Math.max(f, 1 / Math.min(S.areaKmW, S.areaKmH));
+    const w = clampKm(Math.round(S.areaKmW * f)), h = clampKm(Math.round(S.areaKmH * f));
+    if (w === S.areaKmW && h === S.areaKmH) return; // already at the limit
+    S.areaKmW = w;
+    S.areaKmH = h;
+    writeForm();
+    render();
+  }
+  // Grey out a zoom button once both edges have hit the matching km limit.
+  function updateZoomBtns() {
+    const zin = $('zoomInBtn'), zout = $('zoomOutBtn');
+    if (!zin || !zout) return;
+    zin.disabled = S.areaKmW <= 1 && S.areaKmH <= 1;
+    zout.disabled = S.areaKmW >= 600 && S.areaKmH >= 600;
+  }
+
   // Re-run the render with the current state — used by the colour palette UI to
   // restyle the existing map (tiles come from browser cache, so it's quick).
   // No-op until a map has been rendered at least once this session.
@@ -156,6 +184,8 @@
     canvas.id = 'mapCanvas';
     canvas.removeAttribute('style');
     stage.appendChild(canvas);
+    $('zoomCtl').hidden = false; // recrop controls become usable once a map exists
+    updateZoomBtns();
   }
 
   // Rebuild the last rendered map from a persisted PNG data URL so a reload
@@ -208,6 +238,8 @@
 
     $('genBtn').addEventListener('click', render);
     $('dlBtn').addEventListener('click', onDownload);
+    $('zoomInBtn').addEventListener('click', () => zoomBy(1 / ZOOM_STEP));
+    $('zoomOutBtn').addEventListener('click', () => zoomBy(ZOOM_STEP));
     $('searchBtn').addEventListener('click', onLocate);
     $('placeSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') onLocate(); });
     // re-render on Enter from any coordinate / area field

@@ -192,6 +192,25 @@
     max-width: 100%; max-height: calc(100vh - 240px); width: auto; height: auto;
     display: block; box-shadow: 0 0 24px rgba(0,0,0,0.6);
   }
+  /* recrop / zoom controls overlaid on the map (top-right of the stage) */
+  .zoom-ctl {
+    position: absolute; top: 14px; right: 14px; z-index: 5;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .zoom-ctl[hidden] { display: none; }
+  .zoom-btn {
+    width: 40px; height: 40px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(11,11,16,0.82); color: var(--main);
+    font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 500; line-height: 1;
+    cursor: pointer; border: none; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    transition: background .15s, color .15s, box-shadow .15s;
+    --aug-border-all: 1px; --aug-border-bg: rgba(var(--main-rgb),0.5);
+    --aug-tl: 8px; --aug-br: 8px;
+  }
+  .zoom-btn:hover { background: color-mix(in srgb, var(--main) 24%, rgba(11,11,16,0.82)); box-shadow: 0 0 12px rgba(var(--main-rgb),0.45); }
+  .zoom-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+
   .stage.rendering { border-color: var(--main); }
   .stage.rendering::after {
     content: ''; position: absolute; inset: 0;
