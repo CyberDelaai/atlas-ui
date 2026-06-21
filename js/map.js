@@ -219,6 +219,12 @@
   // shared low-poly water shape: both the land/sea fill and the coastline outline
   // are built from it, so they line up exactly. Bigger STEP = lower-poly.
   const COAST_STEP = 4;
+  // Stroke widths (output px). The coast outline is a vector stroke; the region/
+  // country borders are thinned to a 1px skeleton then re-stroked at exactly
+  // BORDER_LW, so their width is set purely by this knob, independent of how
+  // thick the raster source happened to be. See drawBorders.
+  const COAST_LW = 1.5;
+  const BORDER_LW = 2;  // region/country border width (px); 1 = crisp 1px line
   function lowPolyWater(water, w, h, step) {
     const gw = Math.ceil(w / step), gh = Math.ceil(h / step);
 
@@ -273,7 +279,7 @@
     const at = (gx, gy) => (gx < 0 || gy < 0 || gx >= gw || gy >= gh) ? 0 : grid[gy * gw + gx];
     ctx.save();
     ctx.strokeStyle = rgb(col, 0.9);
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = COAST_LW;
     ctx.lineJoin = ctx.lineCap = 'round';
     ctx.beginPath();
     const seg = (a, b) => { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); };
@@ -301,11 +307,108 @@
     ctx.restore();
   }
 
-  // Repaint every visible pixel of a transparent overlay one flat colour,
-  // preserving its alpha — turns ESRI's dark border lines into light teal ones.
+  // Zhang–Suen thinning: erode a binary mask to a 1px-wide skeleton while keeping
+  // every line connected. Two complementary sub-passes repeat until stable. This
+  // is what makes the border width controllable — whatever thickness the raster
+  // source has (often 2-3px after upscaling) collapses to a single centreline,
+  // and drawBorders then re-strokes that centreline at exactly BORDER_LW.
+  function thinSkeleton(mask, w, h) {
+    const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : mask[y * w + x];
+    let changed = true;
+    const toClear = [];
+    while (changed) {
+      changed = false;
+      for (let step = 0; step < 2; step++) {
+        toClear.length = 0;
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            if (!mask[y * w + x]) continue;
+            const p2 = at(x, y - 1), p3 = at(x + 1, y - 1), p4 = at(x + 1, y),
+                  p5 = at(x + 1, y + 1), p6 = at(x, y + 1), p7 = at(x - 1, y + 1),
+                  p8 = at(x - 1, y), p9 = at(x - 1, y - 1);
+            const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+            if (B < 2 || B > 6) continue;
+            let A = 0;
+            if (!p2 && p3) A++; if (!p3 && p4) A++; if (!p4 && p5) A++;
+            if (!p5 && p6) A++; if (!p6 && p7) A++; if (!p7 && p8) A++;
+            if (!p8 && p9) A++; if (!p9 && p2) A++;
+            if (A !== 1) continue;
+            if (step === 0) {
+              if (p2 * p4 * p6 || p4 * p6 * p8) continue;
+            } else {
+              if (p2 * p4 * p8 || p2 * p6 * p8) continue;
+            }
+            toClear.push(y * w + x);
+          }
+        }
+        if (toClear.length) { changed = true; for (const idx of toClear) mask[idx] = 0; }
+      }
+    }
+    return mask;
+  }
+
+  // Draw the region/country borders as a thin, uniform line. We scale the tinted
+  // raster to output size, binarize it, thin it to a 1px skeleton, then splat an
+  // anti-aliased point from each skeleton pixel. Because the skeleton is exactly
+  // 1px, BORDER_LW is the true stroke width: coverage = clamp(BORDER_LW/2 + 0.5
+  // - dist, 0, 1) is the coverage of an anti-aliased line of that half-width.
+  function drawBorders(mctx, bdLayer, v, mapW, mapH, col) {
+    const bcv = document.createElement('canvas');
+    bcv.width = mapW; bcv.height = mapH;
+    const bx = bcv.getContext('2d');
+    bx.drawImage(bdLayer.cv, v.x0 - bdLayer.ox, v.y0 - bdLayer.oy,
+      v.x1 - v.x0, v.y1 - v.y0, 0, 0, mapW, mapH);
+    const src = bx.getImageData(0, 0, mapW, mapH).data;
+
+    let mask = new Uint8Array(mapW * mapH);
+    for (let p = 0; p < mask.length; p++) mask[p] = src[p * 4 + 3] > 110 ? 1 : 0;
+    thinSkeleton(mask, mapW, mapH);
+
+    const hw = BORDER_LW / 2;
+    const ri = Math.ceil(hw + 0.5);
+    const offs = [];
+    for (let dy = -ri; dy <= ri; dy++)
+      for (let dx = -ri; dx <= ri; dx++) {
+        const c = hw + 0.5 - Math.hypot(dx, dy);
+        if (c > 0) offs.push([dx, dy, Math.min(1, c)]);
+      }
+
+    const cov = new Float32Array(mapW * mapH);
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        if (!mask[y * mapW + x]) continue;
+        for (let o = 0; o < offs.length; o++) {
+          const nx = x + offs[o][0], ny = y + offs[o][1];
+          if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
+          const p = ny * mapW + nx;
+          if (offs[o][2] > cov[p]) cov[p] = offs[o][2];
+        }
+      }
+    }
+
+    const out = bx.createImageData(mapW, mapH);
+    const od = out.data;
+    for (let p = 0, i = 0; p < cov.length; p++, i += 4) {
+      if (cov[p] <= 0) continue;
+      od[i] = col[0]; od[i + 1] = col[1]; od[i + 2] = col[2];
+      od[i + 3] = Math.round(cov[p] * 255);
+    }
+    bx.putImageData(out, 0, 0);
+    mctx.drawImage(bcv, 0, 0);
+  }
+
+  // Repaint every visible pixel of a transparent overlay one flat colour —
+  // turns ESRI's dark border lines into light teal ones. The solid core of each
+  // line is made fully opaque, while the anti-aliased halo around it is dropped,
+  // so borders read as thin crisp strokes rather than fat fuzzy ones.
   function tintAlpha(data, col) {
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] > 8) { data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2]; }
+      if (data[i + 3] > 90) {
+        data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2];
+        data[i + 3] = 255;
+      } else {
+        data[i + 3] = 0;
+      }
     }
   }
 
@@ -449,20 +552,18 @@
     drawWaterWaves(mctx, mapW, mapH, fill, WATER);
     drawCoastline(mctx, lp, COL.line);
 
-    // 4) borders: stitch, recolour to light lines, composite
+    // 4) borders: stitch, recolour, then rebuild as one uniform stroke. The ESRI
+    // raster lines vary in strength after scaling, so trusting their width gives
+    // an uneven result. Instead binarize to a clean ~1px centreline (tintAlpha),
+    // scale it to output size, and redraw it ourselves at a single consistent
+    // width (BORDER_LW) with an anti-aliased edge — a crisp core with a soft 1px
+    // falloff, so the line reads at its true width instead of as a bold slab.
     const bdLayer = await stitch(C.TILE_BOUNDS, v, tick);
     const bdctx = bdLayer.cv.getContext('2d');
     const bid = bdctx.getImageData(0, 0, bdLayer.cv.width, bdLayer.cv.height);
     tintAlpha(bid.data, COL.line);
     bdctx.putImageData(bid, 0, 0);
-    mctx.save();
-    mctx.globalAlpha = 0.55;
-    mctx.drawImage(
-      bdLayer.cv,
-      v.x0 - bdLayer.ox, v.y0 - bdLayer.oy, v.x1 - v.x0, v.y1 - v.y0,
-      0, 0, mapW, mapH
-    );
-    mctx.restore();
+    drawBorders(mctx, bdLayer, v, mapW, mapH, COL.line);
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);
