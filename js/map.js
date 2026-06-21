@@ -18,6 +18,19 @@
     const r = lat * Math.PI / 180;
     return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * worldPx(z);
   };
+  // Inverses, for turning a pixel position back into geographic coordinates.
+  const xToLon = (x, z) => x / worldPx(z) * 360 - 180;
+  const yToLat = (y, z) => 180 / Math.PI *
+    Math.atan(Math.sinh(Math.PI - 2 * Math.PI * y / worldPx(z)));
+
+  // Convert a fractional position within the rendered map region (fx, fy each
+  // in [0,1], origin top-left) back to lat/lon, using a stored view. Lets the UI
+  // translate a rectangle drawn on the map into a new centre + area to recrop.
+  ATLAS.pxFracToLatLon = function pxFracToLatLon(v, fx, fy) {
+    const x = v.x0 + (v.x1 - v.x0) * fx;
+    const y = v.y0 + (v.y1 - v.y0) * fy;
+    return { lat: yToLat(y, v.z), lon: xToLon(x, v.z) };
+  };
 
   // ---- geometry: rectangular ground area -> bbox + best zoom ----------------
   // A km-rectangle on the ground maps to an (almost) pixel-rectangle in Web
@@ -480,7 +493,9 @@
     }
     drawScaleBar(ctx, pad + mapW, cy, mapW, opts.areaKmW, COL.frame);
 
-    out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW) };
+    // Stash the view geometry + map-region placement so the UI can map a
+    // rectangle drawn over the map back to coordinates (draw-to-recrop).
+    out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW), view: v, mapW, mapH, pad };
     return out;
   };
 })(window.ATLAS);

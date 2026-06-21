@@ -170,6 +170,99 @@
     zout.disabled = S.areaKmW >= 600 && S.areaKmH >= 600;
   }
 
+  // ---- draw-to-recrop -------------------------------------------------------
+  // A toggle in the zoom cluster lets the user rubber-band a rectangle straight
+  // on the rendered map; on release we convert that box (via the view geometry
+  // stored on the canvas meta) into a new centre + km area and re-render.
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  let cropping = false;
+  let cropDrag = null; // { sx, sy, reg } while dragging
+
+  // The map's drawable region (inside the PAD margins / above the title strip)
+  // in client coords, plus the display scale and view — from the live canvas.
+  function mapRegionRect() {
+    const m = lastCanvas && lastCanvas._meta;
+    if (!m || !m.view) return null;
+    const r = lastCanvas.getBoundingClientRect();
+    const scale = r.width / lastCanvas.width; // uniform: CSS preserves aspect
+    return {
+      left: r.left + m.pad * scale, top: r.top + m.pad * scale,
+      w: m.mapW * scale, h: m.mapH * scale, view: m.view,
+    };
+  }
+
+  function setCropMode(on) {
+    cropping = !!(on && lastCanvas && lastCanvas._meta && lastCanvas._meta.view);
+    $('cropBtn').setAttribute('aria-pressed', cropping ? 'true' : 'false');
+    $('stage').classList.toggle('cropping', cropping);
+    if (!cropping) { cropDrag = null; $('cropSel').hidden = true; }
+  }
+
+  function onCropDown(e) {
+    if (!cropping || e.button !== 0) return;
+    const reg = mapRegionRect();
+    if (!reg) return;
+    e.preventDefault();
+    const x = clamp(e.clientX, reg.left, reg.left + reg.w);
+    const y = clamp(e.clientY, reg.top, reg.top + reg.h);
+    cropDrag = { sx: x, sy: y, reg };
+    drawCropSel(x, y, x, y);
+    window.addEventListener('pointermove', onCropMove);
+    window.addEventListener('pointerup', onCropUp);
+  }
+  function onCropMove(e) {
+    if (!cropDrag) return;
+    const reg = cropDrag.reg;
+    drawCropSel(cropDrag.sx, cropDrag.sy,
+      clamp(e.clientX, reg.left, reg.left + reg.w),
+      clamp(e.clientY, reg.top, reg.top + reg.h));
+  }
+  function onCropUp(e) {
+    window.removeEventListener('pointermove', onCropMove);
+    window.removeEventListener('pointerup', onCropUp);
+    const drag = cropDrag;
+    cropDrag = null;
+    $('cropSel').hidden = true;
+    if (!drag) return;
+    const reg = drag.reg;
+    const x1 = clamp(e.clientX, reg.left, reg.left + reg.w);
+    const y1 = clamp(e.clientY, reg.top, reg.top + reg.h);
+    // Ignore an accidental click / tiny drag.
+    if (Math.abs(x1 - drag.sx) < 10 || Math.abs(y1 - drag.sy) < 10) return;
+    applyCrop(drag.sx, drag.sy, x1, y1, reg);
+    setCropMode(false);
+  }
+
+  // Position the rubber-band div (a child of #stage) for the two client points.
+  function drawCropSel(x0, y0, x1, y1) {
+    const sr = $('stage').getBoundingClientRect();
+    const sel = $('cropSel');
+    sel.hidden = false;
+    sel.style.left = (Math.min(x0, x1) - sr.left) + 'px';
+    sel.style.top = (Math.min(y0, y1) - sr.top) + 'px';
+    sel.style.width = Math.abs(x1 - x0) + 'px';
+    sel.style.height = Math.abs(y1 - y0) + 'px';
+  }
+
+  // Turn the drawn box (two client points) into a new centre + area, then render.
+  function applyCrop(x0, y0, x1, y1, reg) {
+    const fx = (cx) => clamp((cx - reg.left) / reg.w, 0, 1);
+    const fy = (cy) => clamp((cy - reg.top) / reg.h, 0, 1);
+    const fx0 = fx(Math.min(x0, x1)), fx1 = fx(Math.max(x0, x1));
+    const fy0 = fy(Math.min(y0, y1)), fy1 = fy(Math.max(y0, y1));
+    const nw = ATLAS.pxFracToLatLon(reg.view, fx0, fy0); // top-left
+    const se = ATLAS.pxFracToLatLon(reg.view, fx1, fy1); // bottom-right
+    const c  = ATLAS.pxFracToLatLon(reg.view, (fx0 + fx1) / 2, (fy0 + fy1) / 2);
+    const cl = Math.cos(c.lat * Math.PI / 180);
+    S.lat = +c.lat.toFixed(5);
+    S.lon = +c.lon.toFixed(5);
+    S.areaKmW = clampKm(Math.round((se.lon - nw.lon) * 111320 * cl / 1000));
+    S.areaKmH = clampKm(Math.round((nw.lat - se.lat) * 111320 / 1000));
+    writeForm();
+    persist();
+    render();
+  }
+
   // Re-run the render with the current state — used by the colour palette UI to
   // restyle the existing map (tiles come from browser cache, so it's quick).
   // No-op until a map has been rendered at least once this session.
@@ -185,6 +278,7 @@
     canvas.removeAttribute('style');
     stage.appendChild(canvas);
     $('zoomCtl').hidden = false; // recrop controls become usable once a map exists
+    setCropMode(false);          // a fresh map cancels any in-progress draw
     updateZoomBtns();
   }
 
@@ -240,6 +334,9 @@
     $('dlBtn').addEventListener('click', onDownload);
     $('zoomInBtn').addEventListener('click', () => zoomBy(1 / ZOOM_STEP));
     $('zoomOutBtn').addEventListener('click', () => zoomBy(ZOOM_STEP));
+    $('cropBtn').addEventListener('click', () => setCropMode(!cropping));
+    $('stage').addEventListener('pointerdown', onCropDown);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cropping) setCropMode(false); });
     $('searchBtn').addEventListener('click', onLocate);
     $('placeSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') onLocate(); });
     // re-render on Enter from any coordinate / area field

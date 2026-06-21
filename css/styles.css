@@ -210,6 +210,22 @@
   }
   .zoom-btn:hover { background: color-mix(in srgb, var(--main) 24%, rgba(11,11,16,0.82)); box-shadow: 0 0 12px rgba(var(--main-rgb),0.45); }
   .zoom-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+  .crop-btn svg { width: 20px; height: 20px; display: block; }
+  /* the draw-region toggle reads as "armed" while active */
+  .crop-btn[aria-pressed="true"] {
+    background: var(--main); color: rgba(11,11,16,0.95);
+    box-shadow: 0 0 12px rgba(var(--main-rgb),0.6);
+  }
+
+  /* draw-to-recrop: crosshair over the map + the rubber-band rectangle */
+  .stage.cropping, .stage.cropping canvas { cursor: crosshair; }
+  .crop-sel {
+    position: absolute; z-index: 6; pointer-events: none;
+    border: 1.5px solid var(--main);
+    background: rgba(var(--main-rgb),0.12);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.4);
+  }
+  .crop-sel[hidden] { display: none; }
 
   .stage.rendering { border-color: var(--main); }
   .stage.rendering::after {
