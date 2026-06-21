@@ -225,6 +225,12 @@
   // thick the raster source happened to be. See drawBorders.
   const COAST_LW = 1.5;
   const BORDER_LW = 2;  // region/country border width (px); 1 = crisp 1px line
+  // How hard to facet the region/country borders. After thinning to a 1px
+  // skeleton we trace it into polylines and collapse pixel staircases with
+  // Douglas-Peucker at this tolerance (output px), so borders read as faceted
+  // low-poly lines like the coastline instead of following the jagged raster.
+  // Bigger = chunkier facets.
+  const BORDER_SIMPLIFY = 3.5;
   function lowPolyWater(water, w, h, step) {
     const gw = Math.ceil(w / step), gh = Math.ceil(h / step);
 
@@ -347,11 +353,91 @@
     return mask;
   }
 
-  // Draw the region/country borders as a thin, uniform line. We scale the tinted
-  // raster to output size, binarize it, thin it to a 1px skeleton, then splat an
-  // anti-aliased point from each skeleton pixel. Because the skeleton is exactly
-  // 1px, BORDER_LW is the true stroke width: coverage = clamp(BORDER_LW/2 + 0.5
-  // - dist, 0, 1) is the coverage of an anti-aliased line of that half-width.
+  // Walk a 1px skeleton mask into ordered polylines (8-connected). Each undirected
+  // pixel-to-pixel link is consumed once; walks start at endpoints/junctions
+  // (degree != 2) so branches split into separate lines, then any leftover closed
+  // loops (all degree 2) are picked up in a second pass. The result is a set of
+  // staircased point chains ready to be simplified into low-poly facets.
+  function tracePolylines(mask, w, h) {
+    const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : mask[y * w + x];
+    const NB = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+    const deg = (x, y) => { let d = 0; for (const [dx, dy] of NB) d += at(x + dx, y + dy); return d; };
+    const seen = new Set();
+    const key = (a, b) => a < b ? a * mask.length + b : b * mask.length + a;
+    const lines = [];
+
+    // Walk from (cx,cy) following unconsumed links until a non-degree-2 node or a
+    // dead end; returns the trailing points (excludes the given start point).
+    const walk = (cx, cy) => {
+      const pts = [];
+      while (true) {
+        let nx = -1, ny = -1;
+        for (const [dx, dy] of NB) {
+          const x = cx + dx, y = cy + dy;
+          if (!at(x, y)) continue;
+          const k = key(cy * w + cx, y * w + x);
+          if (seen.has(k)) continue;
+          seen.add(k); nx = x; ny = y; break;
+        }
+        if (nx < 0) break;
+        pts.push([nx, ny]); cx = nx; cy = ny;
+        if (deg(cx, cy) !== 2) break;
+      }
+      return pts;
+    };
+
+    const startFrom = (x, y) => {
+      for (const [dx, dy] of NB) {
+        const nx = x + dx, ny = y + dy;
+        if (!at(nx, ny)) continue;
+        const k = key(y * w + x, ny * w + nx);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        lines.push([[x, y], [nx, ny], ...walk(nx, ny)]);
+      }
+    };
+
+    // pass 1: open chains from endpoints/junctions
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        if (mask[y * w + x] && deg(x, y) !== 2) startFrom(x, y);
+    // pass 2: remaining closed loops
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        if (mask[y * w + x]) startFrom(x, y);
+    return lines;
+  }
+
+  // Ramer–Douglas–Peucker: drop interior points that lie within `eps` of the
+  // chord, collapsing pixel staircases into a few straight facets. Iterative
+  // (explicit stack) so long borders don't blow the call stack.
+  function simplify(pts, eps) {
+    if (pts.length < 3) return pts;
+    const keep = new Uint8Array(pts.length);
+    keep[0] = keep[pts.length - 1] = 1;
+    const stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      const [a, b] = stack.pop();
+      const ax = pts[a][0], ay = pts[a][1];
+      const dx = pts[b][0] - ax, dy = pts[b][1] - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      let maxD = -1, idx = -1;
+      for (let i = a + 1; i < b; i++) {
+        const d = Math.abs((pts[i][0] - ax) * dy - (pts[i][1] - ay) * dx) / len;
+        if (d > maxD) { maxD = d; idx = i; }
+      }
+      if (maxD > eps) { keep[idx] = 1; stack.push([a, idx], [idx, b]); }
+    }
+    const out = [];
+    for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
+    return out;
+  }
+
+  // Draw the region/country borders as low-poly faceted lines. We scale the tinted
+  // raster to output size, binarize it, thin it to a 1px skeleton, trace that into
+  // polylines and simplify them (BORDER_SIMPLIFY) so the jagged raster collapses
+  // into clean straight facets — then stroke as vectors at BORDER_LW with round
+  // joins, matching the coastline's faceted look.
   function drawBorders(mctx, bdLayer, v, mapW, mapH, col) {
     const bcv = document.createElement('canvas');
     bcv.width = mapW; bcv.height = mapH;
@@ -360,41 +446,24 @@
       v.x1 - v.x0, v.y1 - v.y0, 0, 0, mapW, mapH);
     const src = bx.getImageData(0, 0, mapW, mapH).data;
 
-    let mask = new Uint8Array(mapW * mapH);
+    const mask = new Uint8Array(mapW * mapH);
     for (let p = 0; p < mask.length; p++) mask[p] = src[p * 4 + 3] > 110 ? 1 : 0;
     thinSkeleton(mask, mapW, mapH);
 
-    const hw = BORDER_LW / 2;
-    const ri = Math.ceil(hw + 0.5);
-    const offs = [];
-    for (let dy = -ri; dy <= ri; dy++)
-      for (let dx = -ri; dx <= ri; dx++) {
-        const c = hw + 0.5 - Math.hypot(dx, dy);
-        if (c > 0) offs.push([dx, dy, Math.min(1, c)]);
-      }
-
-    const cov = new Float32Array(mapW * mapH);
-    for (let y = 0; y < mapH; y++) {
-      for (let x = 0; x < mapW; x++) {
-        if (!mask[y * mapW + x]) continue;
-        for (let o = 0; o < offs.length; o++) {
-          const nx = x + offs[o][0], ny = y + offs[o][1];
-          if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
-          const p = ny * mapW + nx;
-          if (offs[o][2] > cov[p]) cov[p] = offs[o][2];
-        }
-      }
+    const lines = tracePolylines(mask, mapW, mapH);
+    mctx.save();
+    mctx.strokeStyle = rgb(col, 0.9);
+    mctx.lineWidth = BORDER_LW;
+    mctx.lineJoin = mctx.lineCap = 'round';
+    mctx.beginPath();
+    for (const line of lines) {
+      const pts = simplify(line, BORDER_SIMPLIFY);
+      if (pts.length < 2) continue;
+      mctx.moveTo(pts[0][0] + 0.5, pts[0][1] + 0.5);
+      for (let i = 1; i < pts.length; i++) mctx.lineTo(pts[i][0] + 0.5, pts[i][1] + 0.5);
     }
-
-    const out = bx.createImageData(mapW, mapH);
-    const od = out.data;
-    for (let p = 0, i = 0; p < cov.length; p++, i += 4) {
-      if (cov[p] <= 0) continue;
-      od[i] = col[0]; od[i + 1] = col[1]; od[i + 2] = col[2];
-      od[i + 3] = Math.round(cov[p] * 255);
-    }
-    bx.putImageData(out, 0, 0);
-    mctx.drawImage(bcv, 0, 0);
+    mctx.stroke();
+    mctx.restore();
   }
 
   // Repaint every visible pixel of a transparent overlay one flat colour —
