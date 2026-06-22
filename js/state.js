@@ -111,8 +111,10 @@ ATLAS.state = {
   // so they stay put through pan / zoom / recrop / recolour. The pin and its
   // label are disjointed — the label floats at offset { ldx, ldy } (fraction of
   // the map) and a connector line (line: 'straight' | 'elbow') links them. Each
-  // is { id, lat, lon, label, callout, showCallout, ldx, ldy, line }. Managed by
-  // js/markers.js, persisted under atlas:markers, drawn onto the canvas on export.
+  // is { id, lat, lon, label, callout, showCallout, ldx, ldy, line, color }, where
+  // color is a per-marker override (null = use the colors.marker default below).
+  // Managed by js/markers.js, persisted under atlas:markers, drawn onto the canvas
+  // on export.
   markers: [],
 
   // User-pickable map colours (hex). Each drives one element of the render;
@@ -125,6 +127,7 @@ ATLAS.state = {
     border: '#9cceb8', // country / region border lines
     frame:  '#78b29e', // map frame + scale bar
     region: '#78aa96', // seeds the bottom title tone
+    marker: '#00f0ff', // default annotation-marker accent (per-marker overridable)
   },
   // Last custom (non-preset) pick per slot, so the palette popup can re-offer it.
   customColors: {},

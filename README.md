@@ -31,12 +31,14 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   right-angled, toggled per marker) keeps them linked. Click either to edit the
   label and an optional callout bubble, switch the label to a bare style where
   the connector line runs on under the text as its underline instead of a box,
+  recolor that one marker from its own palette (or leave it on the default),
   or delete it. Markers are anchored to
   real coordinates, so they stay put through pan / zoom / recrop / recolor, are
   saved with the rest of your working area, and are drawn into the exported PNG.
-- **Colors** — recolor any map element (land, land shade, water, borders, frame, region)
-  from the **MAP COLORS** panel: each opens a palette popup of preset swatches plus a
-  custom color picker, and the map restyles live without re-fetching tiles.
+- **Colors** — recolor any map element (land, land shade, water, borders, frame,
+  region, and the default marker accent) from the **MAP COLORS** panel: each opens
+  a palette popup of preset swatches plus a custom color picker, and the map
+  restyles live without re-fetching tiles.
 - **Export** — one click writes a high-resolution PNG.
 - **Persistent** — your inputs, color picks and the last rendered map are saved in
   the browser (`localStorage`), so reopening the page restores the whole working area

@@ -15,11 +15,17 @@
   'use strict';
   const $ = ATLAS.$;
   const S = ATLAS.state;
+  const C = ATLAS.const;
 
-  // Annotation accent: the app's signature cyan, kept distinct from the (user
-  // recolourable) map palette so markers always read as a separate overlay.
+  // Annotation accent fallback: the app's signature cyan. Each marker resolves
+  // its own colour via colorOf() — its per-marker override if set, otherwise the
+  // user-pickable colors.marker default, otherwise this. Kept conceptually
+  // distinct from the map palette so markers read as a separate overlay.
   const ACCENT = '#00f0ff';
   const INK = 'rgba(6,18,26,0.92)'; // dark backing for legibility
+  // Resolve a marker's accent colour, and build an rgba() string from a hex.
+  const colorOf = (m) => m.color || (S.colors && S.colors.marker) || ACCENT;
+  const rgba = (hex, a) => { const [r, g, b] = ATLAS.hexToArr(hex); return `rgba(${r},${g},${b},${a})`; };
   const SVGNS = 'http://www.w3.org/2000/svg';
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
   // Default label offset from the pin (fraction of map width / height): a little
@@ -40,6 +46,7 @@
     if (m.ldy == null) m.ldy = DEF_LDY;
     if (m.line !== 'elbow') m.line = 'straight';
     m.underline = !!m.underline; // bare-underline label style (no box/background)
+    if (m.color == null) m.color = null; // per-marker colour override (null = default)
   }
 
   // ---- persistence -----------------------------------------------------------
@@ -168,6 +175,10 @@
       const m = S.markers.find((x) => String(x.id) === el.dataset.id);
       const path = lines.querySelector(`.marker-line[data-id="${el.dataset.id}"]`);
       if (!m) { el.remove(); if (path) path.remove(); return; }
+      // drive the overlay's colour vars from the marker's resolved accent
+      const col = colorOf(m);
+      el.style.setProperty('--mk', col);
+      if (path) { path.style.stroke = col; path.style.filter = `drop-shadow(0 0 3px ${rgba(col, 0.6)})`; }
       const f = ATLAS.latLonToPxFrac(M.view, m.lat, m.lon);
       if (f.fx < -0.03 || f.fx > 1.03 || f.fy < -0.03 || f.fy > 1.03) {
         el.style.display = 'none';
@@ -264,6 +275,7 @@
       ldy: DEF_LDY,
       line: 'straight',
       underline: false,
+      color: null, // use the colors.marker default until overridden in the editor
     };
     S.markers.push(m);
     persist();
@@ -281,6 +293,7 @@
     $('meCalloutField').hidden = !on;
     $('meLineToggle').dataset.pos = m.line === 'elbow' ? 'right' : 'left';
     $('meUnderlineToggle').dataset.pos = m.underline ? 'right' : 'left';
+    syncEditorColor(m);
     editor.hidden = false;
     positionEditor(el);
     const lab = $('meLabel');
@@ -288,6 +301,26 @@
     lab.select();
   }
   function closeEditor() { editor.hidden = true; editingId = null; }
+
+  // ---- per-marker colour palette (inside the editor) -------------------------
+  // Reflect marker `m`'s colour: light the active swatch (the "default" chip when
+  // m has no override), paint that chip to the current default, and seed the
+  // native picker. Built once in init(); presets come from the shared palette.
+  function syncEditorColor(m) {
+    const grid = $('meColorGrid');
+    if (!grid) return;
+    const def = (S.colors && S.colors.marker) || ACCENT;
+    const dflt = grid.querySelector('.me-sw-default');
+    dflt.style.background = def;        // the default chip previews the map default
+    dflt.style.color = def;             // drives its .active glow (currentColor)
+    const cur = (m.color || '').toLowerCase();
+    grid.querySelectorAll('.me-sw').forEach((sw) => {
+      if (sw.classList.contains('me-sw-pick')) return;
+      const c = (sw.dataset.color || '').toLowerCase();
+      sw.classList.toggle('active', cur ? c === cur : sw.classList.contains('me-sw-default'));
+    });
+    $('meColorCustom').value = /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : def;
+  }
 
   // Place the popup beside the marker pin, flipping/clamping to stay on-screen.
   function positionEditor(el) {
@@ -342,23 +375,23 @@
     for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
     return { lines, w: tw + CALLOUT.padX * 2, h: lines.length * CALLOUT.lh + CALLOUT.padY * 2 };
   }
-  function drawCallout(ctx, x, y, c) {
+  function drawCallout(ctx, x, y, c, col) {
     ctx.fillStyle = 'rgba(6,18,26,0.9)';
     roundRect(ctx, x, y, c.w, c.h, 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,240,255,0.5)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = ACCENT; ctx.fillRect(x, y, 2, c.h); // accent left edge
+    ctx.strokeStyle = rgba(col, 0.5); ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = col; ctx.fillRect(x, y, 2, c.h); // accent left edge
     ctx.font = "500 12px 'JetBrains Mono', monospace";
     ctx.fillStyle = '#d8e6ee'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     c.lines.forEach((l, i) => ctx.fillText(l, x + CALLOUT.padX, y + CALLOUT.padY + i * CALLOUT.lh));
   }
   // Stroke a connector path (array of points) with the marker accent + glow.
-  function strokeConnector(ctx, pts) {
+  function strokeConnector(ctx, pts, col) {
     ctx.save();
     ctx.beginPath();
     pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-    ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
     ctx.lineJoin = 'miter'; ctx.lineCap = 'round';
-    ctx.shadowColor = 'rgba(0,240,255,0.7)'; ctx.shadowBlur = 4;
+    ctx.shadowColor = rgba(col, 0.7); ctx.shadowBlur = 4;
     ctx.stroke();
     ctx.restore();
   }
@@ -367,6 +400,7 @@
   function drawOneMarker(ctx, px, py, m) {
     const label = (m.label || '').toUpperCase();
     const hasCallout = !!(m.showCallout && m.callout);
+    const col = colorOf(m);
 
     // ---- lay out the label group (label box + optional callout below) --------
     let labelBox = null;
@@ -380,7 +414,7 @@
     const gap = 5;
     const bodyW = Math.max(labelBox ? labelBox.w : 0, cc ? cc.w : 0);
     const bodyH = (labelBox ? labelBox.h : 0) + (labelBox && cc ? gap : 0) + (cc ? cc.h : 0);
-    if (!bodyW || !bodyH) { drawPin(ctx, px, py, m); return; }
+    if (!bodyW || !bodyH) { drawPin(ctx, px, py, col); return; }
 
     // group centred on the label offset point (fraction of map → px)
     const cx = px + m.ldx * ctx._mapW, cy = py + m.ldy * ctx._mapH;
@@ -391,7 +425,7 @@
       ? { x: left, y: top, w: labelBox.w, h: labelBox.h }
       : { x: left, y: top, w: cc.w, h: cc.h };
     const pts = connectorPoints({ x: px, y: py }, connBox, m.line, m.underline);
-    if (pts) strokeConnector(ctx, pts);
+    if (pts) strokeConnector(ctx, pts, col);
 
     // ---- label box -----------------------------------------------------------
     let y = top;
@@ -401,25 +435,25 @@
       if (m.underline) {
         // bare style: just the text — the underline is drawn by the connector,
         // which runs along this box's bottom edge as one continuous line
-        ctx.fillStyle = ACCENT; ctx.textAlign = 'left';
+        ctx.fillStyle = col; ctx.textAlign = 'left';
         ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
       } else {
         ctx.fillStyle = INK;
         roundRect(ctx, left, y, labelBox.w, labelBox.h, 2); ctx.fill();
-        ctx.strokeStyle = ACCENT; ctx.lineWidth = 1; ctx.stroke();
-        ctx.fillStyle = ACCENT; ctx.textAlign = 'left';
+        ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = col; ctx.textAlign = 'left';
         ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
       }
       y += labelBox.h + gap;
     }
-    if (cc) drawCallout(ctx, left, y, cc);
+    if (cc) drawCallout(ctx, left, y, cc, col);
 
-    drawPin(ctx, px, py, m);
+    drawPin(ctx, px, py, col);
   }
-  function drawPin(ctx, x, y) {
+  function drawPin(ctx, x, y, col) {
     ctx.save();
     ctx.translate(x, y); ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = ACCENT;
+    ctx.fillStyle = col;
     roundRect(ctx, -7, -7, 14, 14, 2); ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = '#06121a'; ctx.stroke();
     ctx.restore();
@@ -451,6 +485,32 @@
     build();
 
     $('addMarkerBtn').addEventListener('click', addMarker);
+
+    // colour palette: inject the shared preset swatches ahead of the picker chip,
+    // then commit a pick (or reset to the map default) to the open marker.
+    const meGrid = $('meColorGrid');
+    const mePick = meGrid.querySelector('.me-sw-pick');
+    (C.PALETTE || []).forEach((hex) => {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'me-sw';
+      sw.dataset.color = hex;
+      sw.style.background = hex;
+      sw.style.color = hex; // .active glow uses currentColor
+      meGrid.insertBefore(sw, mePick);
+    });
+    meGrid.addEventListener('click', (e) => {
+      const sw = e.target.closest('.me-sw');
+      if (!sw || sw.classList.contains('me-sw-pick')) return;
+      const m = editing(); if (!m) return;
+      m.color = sw.dataset.color || null; // empty data-color = the "default" chip
+      persist(); sync(); syncEditorColor(m);
+    });
+    $('meColorCustom').addEventListener('input', () => {
+      const m = editing(); if (!m) return;
+      m.color = $('meColorCustom').value;
+      persist(); sync(); syncEditorColor(m);
+    });
 
     // editor inputs operate on the currently-open marker, live + persisted
     $('meLabel').addEventListener('input', () => {

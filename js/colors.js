@@ -105,7 +105,10 @@
       paintChip(openSlot);
       syncPop();
       persist();
-      scheduleRerender();
+      // The marker slot only tints the annotation overlay, not the map render —
+      // repaint the markers directly instead of re-rendering the whole map.
+      if (openSlot === 'marker') { if (ATLAS.markers) ATLAS.markers.reposition(); }
+      else scheduleRerender();
     }
 
     // ---- wiring ----

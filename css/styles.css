@@ -445,6 +445,31 @@
   .marker-editor input:focus, .marker-editor textarea:focus {
     outline: none; border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb), 0.35);
   }
+  /* per-marker colour palette (inside the marker editor) */
+  .me-swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .me-sw {
+    width: 22px; height: 22px; flex-shrink: 0; padding: 0;
+    border: 1px solid var(--dim); background: transparent; cursor: pointer;
+    transition: transform .1s, border-color .1s, box-shadow .1s;
+  }
+  .me-sw:hover { transform: scale(1.12); }
+  .me-sw.active { border-color: #fff; box-shadow: 0 0 7px currentColor; }
+  /* the "use map default" chip carries the current default colour plus a slash */
+  .me-sw-default {
+    position: relative; color: var(--main);
+    background-image: linear-gradient(135deg, transparent 44%, #fff 44%, #fff 56%, transparent 56%);
+  }
+  /* the custom-colour picker chip (native input sits invisibly on top) */
+  .me-sw-pick {
+    position: relative; color: var(--main);
+    display: inline-flex; align-items: center; justify-content: center;
+    --aug-border-all: 1px; --aug-border-bg: var(--main);
+  }
+  .me-sw-pick .pick-icon { width: 15px; height: 15px; pointer-events: none; }
+  .me-sw-pick input[type="color"] {
+    position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: none; padding: 0;
+  }
+
   .me-actions { display: flex; gap: 10px; margin-top: 2px; }
   .me-actions .btn { flex: 1; height: 36px; padding: 0; font-size: 12px; letter-spacing: 2px; }
   .me-del { --btn-color: var(--magenta); }
