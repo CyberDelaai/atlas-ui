@@ -62,6 +62,7 @@
     ATLAS.save('atlas:areaH', S.areaKmH);
     ATLAS.save('atlas:title', S.title);
     ATLAS.save('atlas:cityBorders', S.cityBorders ? '1' : '0');
+    ATLAS.save('atlas:districtsLand', S.districtsLandOnly ? '1' : '0');
   }
   // Persist the rendered map itself (PNG data URL) plus the zoom shown in the
   // output readout, so a reload restores the whole working area, not just the
@@ -94,6 +95,19 @@
   function toggleDistricts() {
     S.cityBorders = !S.cityBorders;
     syncDistrictToggle();
+    persist();
+    ATLAS.rerender();
+  }
+  // Sub-option: when ON, the city/district lines are clipped to land so they're
+  // not drawn over water (see opts.districtsLandOnly in renderMap). No effect
+  // when the district layer itself is off, but a re-render is cheap (cached).
+  function syncDistrictLandToggle() {
+    const btn = $('districtLandToggle');
+    if (btn) btn.dataset.pos = S.districtsLandOnly ? 'right' : 'left';
+  }
+  function toggleDistrictLand() {
+    S.districtsLandOnly = !S.districtsLandOnly;
+    syncDistrictLandToggle();
     persist();
     ATLAS.rerender();
   }
@@ -141,7 +155,7 @@
     try {
       const canvas = await ATLAS.renderMap({
         lat: S.lat, lon: S.lon, areaKmW: S.areaKmW, areaKmH: S.areaKmH,
-        title: S.title, cityBorders: S.cityBorders,
+        title: S.title, cityBorders: S.cityBorders, districtsLandOnly: S.districtsLandOnly,
         onProgress: (d, t) => setStatus(ATLAS.t('st_loading') + ` ${d}/${t}`),
       });
       lastCanvas = canvas;
@@ -384,8 +398,10 @@
     S.areaKmH = num(get('atlas:areaH', oldArea ?? S.areaKmH)) ?? S.areaKmH;
     S.title = get('atlas:title', S.title);
     S.cityBorders = get('atlas:cityBorders', S.cityBorders ? '1' : '0') !== '0';
+    S.districtsLandOnly = get('atlas:districtsLand', S.districtsLandOnly ? '1' : '0') !== '0';
     writeForm();
     syncDistrictToggle();
+    syncDistrictLandToggle();
     restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''), get('atlas:mapMeta', ''));
 
     $('genBtn').addEventListener('click', render);
@@ -397,6 +413,7 @@
     $('panLeftBtn').addEventListener('click', () => panBy(-1, 0));
     $('panRightBtn').addEventListener('click', () => panBy(1, 0));
     $('districtToggle').addEventListener('click', toggleDistricts);
+    $('districtLandToggle').addEventListener('click', toggleDistrictLand);
     $('cropBtn').addEventListener('click', () => setCropMode(!cropping));
     $('stage').addEventListener('pointerdown', onCropDown);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cropping) setCropMode(false); });

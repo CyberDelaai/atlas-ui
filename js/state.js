@@ -106,6 +106,7 @@ ATLAS.state = {
   title: '',        // bottom title strip (auto-filled from geocode, editable)
   rendering: false, // guard against overlapping renders
   cityBorders: true, // draw the finer OSM city/district sub-layer (area-gated)
+  districtsLandOnly: true, // clip the city/district sub-layer to land (hide lines over water)
 
   // Land markers: draggable annotation pins anchored to geographic coordinates,
   // so they stay put through pan / zoom / recrop / recolour. The pin and its

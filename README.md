@@ -22,7 +22,9 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   and finer city / district borders (auto-shown once you zoom into a city-scale view)
   from OpenStreetMap's Overpass API. All sources are key-free; the lines are stroked
   straight onto the `<canvas>` in the duotone teal palette. The city / district
-  sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT panel.
+  sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT
+  panel, and the **DISTRICTS: LAND ONLY** toggle clips those finer lines to land so
+  boundaries that run out over the sea aren't drawn on the water.
 - **Labels** — the region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
 - **Land markers** — drop your own annotation pins with **+ ADD MARKER** in the

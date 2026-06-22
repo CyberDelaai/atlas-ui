@@ -480,24 +480,42 @@
   // the same Web-Mercator mapping the rest of the pipeline uses, simplify
   // (BORDER_SIMPLIFY) for the faceted look, then stroke at BORDER_LW with round
   // joins. No raster, no labels — the lines come straight from the geometry.
-  function drawBorders(mctx, rings, v, mapW, mapH, col, lw, alpha, eps) {
+  // When `waterMask` is supplied (the per-pixel sea mask, 1 = water), the lines are
+  // stroked onto an offscreen layer, knocked out wherever they cross water, then
+  // composited back — so e.g. the city sub-layer can be kept on land only. The
+  // mask matches the low-poly coastline exactly, so the cut lands right at the
+  // shore.
+  function drawBorders(mctx, rings, v, mapW, mapH, col, lw, alpha, eps, waterMask) {
     const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
-    mctx.save();
-    mctx.strokeStyle = rgb(col, alpha == null ? 0.9 : alpha);
-    mctx.lineWidth = lw == null ? BORDER_LW : lw;
-    mctx.lineJoin = mctx.lineCap = 'round';
-    mctx.beginPath();
+    let layer = null, ctx = mctx;
+    if (waterMask) {
+      layer = document.createElement('canvas');
+      layer.width = mapW; layer.height = mapH;
+      ctx = layer.getContext('2d');
+    }
+    ctx.save();
+    ctx.strokeStyle = rgb(col, alpha == null ? 0.9 : alpha);
+    ctx.lineWidth = lw == null ? BORDER_LW : lw;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
     for (const ring of rings) {
       const pts = simplify(ring.map(([lon, lat]) => [
         (lonToX(lon, v.z) - v.x0) * sx,
         (latToY(lat, v.z) - v.y0) * sy,
       ]), eps == null ? BORDER_SIMPLIFY : eps);
       if (pts.length < 2) continue;
-      mctx.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length; i++) mctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     }
-    mctx.stroke();
-    mctx.restore();
+    ctx.stroke();
+    ctx.restore();
+    if (waterMask) {
+      // erase line pixels that fall on water, then stamp the land-only lines down
+      const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
+      for (let p = 0; p < waterMask.length; p++) if (waterMask[p]) d[p * 4 + 3] = 0;
+      ctx.putImageData(id, 0, 0);
+      mctx.drawImage(layer, 0, 0);
+    }
   }
 
   // ---- decorative overlays ---------------------------------------------------
@@ -655,10 +673,13 @@
     // city-region-scale views (see cityLevels / CITY_MAX_KM); empty otherwise. The
     // user can also switch the whole sub-layer off (opts.cityBorders === false), in
     // which case we skip the Overpass fetch entirely but still tick to keep progress.
+    // When opts.districtsLandOnly is set, pass the water mask so the sub-layer lines
+    // are clipped to land — district boundaries that run out over the sea are hidden.
     const cityRings = opts.cityBorders === false ? [] : await fetchCityBorders(v, opts.areaKmW);
     tick();
     drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
-      CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY);
+      CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
+      opts.districtsLandOnly ? fill : null);
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);
