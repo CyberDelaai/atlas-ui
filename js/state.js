@@ -18,6 +18,14 @@ ATLAS.const = {
   // fetch admin boundaries (admin-1: country + province/region) and stroke them
   // ourselves — no labels, crisp lines. See fetchBoundaries / drawBorders.
   BOUNDARIES: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Administrative_Divisions/FeatureServer/0/query',
+  // Finer city / district borders. The ESRI layer above stops at admin-1 (country
+  // + state/province), so it has no within-city boundaries. OpenStreetMap (via the
+  // Overpass API) carries the global admin hierarchy down to counties, municipal
+  // districts and neighbourhoods (admin_level 6-10). It's key-free and serves
+  // `Access-Control-Allow-Origin: *`, and we only ask for `out geom;` JSON (ways
+  // with their node coordinates inline) — so each way drops straight into the same
+  // lon/lat ring pipeline the ESRI borders use. See fetchCityBorders / drawBorders.
+  CITY_BOUNDARIES: 'https://overpass-api.de/api/interpreter',
   // Used purely as a land/water mask: OpenStreetMap's standard raster paints
   // water a distinct light blue (#aad3df) at every zoom level, while land is
   // green / beige. The hillshade itself can't tell flat sea from flat land

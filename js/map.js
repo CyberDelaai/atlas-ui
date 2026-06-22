@@ -4,8 +4,9 @@
 //
 // Pipeline: coords + area -> Web-Mercator tile range -> stitch ESRI hillshade
 // tiles -> recolor to the teal duotone -> fetch country/region borders as vector
-// GeoJSON and stroke them as light lines -> draw the rectangular frame, title and
-// scale bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
+// GeoJSON (plus finer city/district borders from OSM Overpass) and stroke them as
+// light lines -> draw the rectangular frame, title and scale bar. Exposes
+// ATLAS.renderMap(opts) -> Promise<canvas>.
 (function (ATLAS) {
   'use strict';
   const C = ATLAS.const;
@@ -229,6 +230,14 @@
   // at this tolerance (output px) so the lines read as faceted low-poly edges
   // like the coastline. Bigger = chunkier facets.
   const BORDER_SIMPLIFY = 3.5;
+  // City / district borders (the OSM admin_level 6-10 sub-layer) are drawn thinner,
+  // dimmer and a touch less faceted than the country/region lines so they read as a
+  // finer layer underneath them. CITY_MAX_KM gates the whole layer off once the
+  // captured area is wider than a city region — a country-scale view shows none.
+  const CITY_BORDER_LW = 1;
+  const CITY_BORDER_ALPHA = 0.55;
+  const CITY_SIMPLIFY = 2;
+  const CITY_MAX_KM = 160;
   function lowPolyWater(water, w, h, step) {
     const gw = Math.ceil(w / step), gh = Math.ceil(h / step);
 
@@ -369,23 +378,58 @@
     return rings;
   }
 
+  // Which OSM admin levels to pull for the city layer, scaled to the captured area:
+  // a tight view wants every level down to neighbourhoods, a metro-wide one only the
+  // coarser district/county lines (so the payload and the line density stay sane).
+  // Returns a regex alternation for the admin_level filter, or null to fetch nothing.
+  function cityLevels(areaKm) {
+    if (areaKm <= 30) return '6|7|8|9|10';
+    if (areaKm <= 80) return '6|7|8';
+    if (areaKm <= CITY_MAX_KM) return '6|7';
+    return null;
+  }
+
+  // Fetch the finer city / district borders from OSM Overpass. Each returned way is
+  // an admin boundary segment whose node coordinates come back inline (`out geom;`),
+  // so we map it straight to a [lon, lat] ring the same drawBorders consumes. Gated
+  // by area (see cityLevels) and, like fetchBoundaries, returns [] on any failure so
+  // the map still renders without the layer.
+  async function fetchCityBorders(v, areaKm) {
+    const levels = cityLevels(areaKm);
+    if (!levels) return [];
+    const q = '[out:json][timeout:25];'
+      + 'way["boundary"="administrative"]["admin_level"~"^(' + levels + ')$"]'
+      + '(' + [v.south, v.west, v.north, v.east].join(',') + ');out geom;';
+    let json;
+    try {
+      const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
+      json = await r.json();
+    } catch (e) { return []; }
+    const rings = [];
+    for (const el of (json && json.elements) || []) {
+      if (el.type === 'way' && el.geometry && el.geometry.length > 1)
+        rings.push(el.geometry.map((p) => [p.lon, p.lat]));
+    }
+    return rings;
+  }
+
   // Draw the region/country borders as low-poly faceted lines. The boundary rings
   // arrive as lon/lat GeoJSON; we project each vertex into the output rectangle via
   // the same Web-Mercator mapping the rest of the pipeline uses, simplify
   // (BORDER_SIMPLIFY) for the faceted look, then stroke at BORDER_LW with round
   // joins. No raster, no labels — the lines come straight from the geometry.
-  function drawBorders(mctx, rings, v, mapW, mapH, col) {
+  function drawBorders(mctx, rings, v, mapW, mapH, col, lw, alpha, eps) {
     const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
     mctx.save();
-    mctx.strokeStyle = rgb(col, 0.9);
-    mctx.lineWidth = BORDER_LW;
+    mctx.strokeStyle = rgb(col, alpha == null ? 0.9 : alpha);
+    mctx.lineWidth = lw == null ? BORDER_LW : lw;
     mctx.lineJoin = mctx.lineCap = 'round';
     mctx.beginPath();
     for (const ring of rings) {
       const pts = simplify(ring.map(([lon, lat]) => [
         (lonToX(lon, v.z) - v.x0) * sx,
         (latToY(lat, v.z) - v.y0) * sy,
-      ]), BORDER_SIMPLIFY);
+      ]), eps == null ? BORDER_SIMPLIFY : eps);
       if (pts.length < 2) continue;
       mctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) mctx.lineTo(pts[i][0], pts[i][1]);
@@ -509,8 +553,8 @@
     const v = computeView(opts.lat, opts.lon, opts.areaKmW, opts.areaKmH, mapW, mapH);
 
     // progress across the two tiled layers (hillshade, water mask) plus one tick
-    // for the vector boundary fetch
-    const total = tileCount(v) * 2 + 1;
+    // each for the region and city vector boundary fetches
+    const total = tileCount(v) * 2 + 2;
     let done = 0;
     const tick = () => { if (opts.onProgress) opts.onProgress(++done, total); };
     if (opts.onProgress) opts.onProgress(0, total);
@@ -543,6 +587,14 @@
     const rings = await fetchBoundaries(v, mapW);
     tick();
     drawBorders(mctx, rings, v, mapW, mapH, COL.line);
+
+    // 4b) finer city / district borders from OSM (admin_level 6-10), under the same
+    // border colour but thinner + dimmer so they read as a sub-layer. Auto-gated to
+    // city-region-scale views (see cityLevels / CITY_MAX_KM); empty otherwise.
+    const cityRings = await fetchCityBorders(v, opts.areaKmW);
+    tick();
+    drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
+      CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY);
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);

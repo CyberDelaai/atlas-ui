@@ -5,7 +5,7 @@ A free, in-browser **cyberpunk map generator** — the newest tool in the
 
 Enter real-world coordinates (or search for a place), choose how big a rectangle of
 ground to capture, and ATLAS renders a stylized hillshade terrain map — recolored
-to the cyberdeck teal palette, with country / region borders, a frame,
+to the cyberdeck teal palette, with country, region and city-district borders, a frame,
 a labelled centre pin, a region name, a title strip and a scale bar — then exports
 it as a PNG.
 
@@ -17,9 +17,11 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   height in km, or use **FIND PLACE** to geocode a name into coordinates.
 - **Recrop / zoom** — the **+ / −** controls on the map recrop it around the same
   centre (zoom in for more detail, out for a wider view) and re-render.
-- **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles and
-  borders from ESRI's boundary tiles; both are key-free and fetched straight onto a
-  `<canvas>`, recolored to the duotone teal palette.
+- **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles;
+  country / region borders come from ESRI's vector administrative-divisions service,
+  and finer city / district borders (auto-shown once you zoom into a city-scale view)
+  from OpenStreetMap's Overpass API. All sources are key-free; the lines are stroked
+  straight onto the `<canvas>` in the duotone teal palette.
 - **Labels** — the region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
 - **Colors** — recolor any map element (land, land shade, water, borders, frame, region)
@@ -30,8 +32,9 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   the browser (`localStorage`), so reopening the page restores the whole working area
   without re-fetching any tiles.
 
-Geocoding uses [OpenStreetMap Nominatim](https://nominatim.org/); terrain and
-boundary tiles are © Esri and its data partners.
+Geocoding uses [OpenStreetMap Nominatim](https://nominatim.org/) and city / district
+borders the [Overpass API](https://overpass-api.de/); terrain and country / region
+boundaries are © Esri and its data partners. OSM data © OpenStreetMap contributors (ODbL).
 
 ## Running
 
