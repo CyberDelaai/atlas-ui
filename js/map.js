@@ -3,9 +3,9 @@
 // cyberdeck.tools apps export their working area.
 //
 // Pipeline: coords + area -> Web-Mercator tile range -> stitch ESRI hillshade
-// tiles -> recolor to the teal duotone -> composite ESRI country/region borders
-// as light lines -> draw the rectangular frame, title and scale
-// bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
+// tiles -> recolor to the teal duotone -> fetch country/region borders as vector
+// GeoJSON and stroke them as light lines -> draw the rectangular frame, title and
+// scale bar. Exposes ATLAS.renderMap(opts) -> Promise<canvas>.
 (function (ATLAS) {
   'use strict';
   const C = ATLAS.const;
@@ -219,17 +219,15 @@
   // shared low-poly water shape: both the land/sea fill and the coastline outline
   // are built from it, so they line up exactly. Bigger STEP = lower-poly.
   const COAST_STEP = 4;
-  // Stroke widths (output px). The coast outline is a vector stroke; the region/
-  // country borders are thinned to a 1px skeleton then re-stroked at exactly
-  // BORDER_LW, so their width is set purely by this knob, independent of how
-  // thick the raster source happened to be. See drawBorders.
+  // Stroke widths (output px). Both the coast outline and the region/country
+  // borders are vector strokes, so their width is set purely by these knobs.
   const COAST_LW = 1.5;
   const BORDER_LW = 2;  // region/country border width (px); 1 = crisp 1px line
-  // How hard to facet the region/country borders. After thinning to a 1px
-  // skeleton we trace it into polylines and collapse pixel staircases with
-  // Douglas-Peucker at this tolerance (output px), so borders read as faceted
-  // low-poly lines like the coastline instead of following the jagged raster.
-  // Bigger = chunkier facets.
+  // How hard to facet the region/country borders. The boundary geometry comes in
+  // as GeoJSON rings (already lightly generalised server-side via
+  // maxAllowableOffset); we collapse near-collinear vertices with Douglas-Peucker
+  // at this tolerance (output px) so the lines read as faceted low-poly edges
+  // like the coastline. Bigger = chunkier facets.
   const BORDER_SIMPLIFY = 3.5;
   function lowPolyWater(water, w, h, step) {
     const gw = Math.ceil(w / step), gh = Math.ceil(h / step);
@@ -313,113 +311,6 @@
     ctx.restore();
   }
 
-  // Zhang–Suen thinning: erode a binary mask to a 1px-wide skeleton while keeping
-  // every line connected. Two complementary sub-passes repeat until stable. This
-  // is what makes the border width controllable — whatever thickness the raster
-  // source has (often 2-3px after upscaling) collapses to a single centreline,
-  // and drawBorders then re-strokes that centreline at exactly BORDER_LW.
-  function thinSkeleton(mask, w, h) {
-    const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : mask[y * w + x];
-    let changed = true;
-    const toClear = [];
-    while (changed) {
-      changed = false;
-      for (let step = 0; step < 2; step++) {
-        toClear.length = 0;
-        for (let y = 1; y < h - 1; y++) {
-          for (let x = 1; x < w - 1; x++) {
-            if (!mask[y * w + x]) continue;
-            const p2 = at(x, y - 1), p3 = at(x + 1, y - 1), p4 = at(x + 1, y),
-                  p5 = at(x + 1, y + 1), p6 = at(x, y + 1), p7 = at(x - 1, y + 1),
-                  p8 = at(x - 1, y), p9 = at(x - 1, y - 1);
-            const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
-            if (B < 2 || B > 6) continue;
-            let A = 0;
-            if (!p2 && p3) A++; if (!p3 && p4) A++; if (!p4 && p5) A++;
-            if (!p5 && p6) A++; if (!p6 && p7) A++; if (!p7 && p8) A++;
-            if (!p8 && p9) A++; if (!p9 && p2) A++;
-            if (A !== 1) continue;
-            if (step === 0) {
-              if (p2 * p4 * p6 || p4 * p6 * p8) continue;
-            } else {
-              if (p2 * p4 * p8 || p2 * p6 * p8) continue;
-            }
-            toClear.push(y * w + x);
-          }
-        }
-        if (toClear.length) { changed = true; for (const idx of toClear) mask[idx] = 0; }
-      }
-    }
-    return mask;
-  }
-
-  // Walk a 1px skeleton mask into ordered polylines (8-connected). Each undirected
-  // pixel-to-pixel link is consumed once; walks start at endpoints/junctions
-  // (degree != 2) so branches split into separate lines, then any leftover closed
-  // loops (all degree 2) are picked up in a second pass. The result is a set of
-  // staircased point chains ready to be simplified into low-poly facets.
-  function tracePolylines(mask, w, h) {
-    const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : mask[y * w + x];
-    const NB = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
-    // Whether (x,y) genuinely links to its neighbour at (dx,dy). A diagonal step
-    // is dropped when an orthogonal pixel already bridges the same two cells: in a
-    // raster staircase, (x,y)->(x+1,y)->(x+1,y+1) also carries the redundant
-    // diagonal chord (x,y)->(x+1,y+1). Counting that chord makes straight diagonals
-    // read as junctions (fragmenting lines) and lets the walk cut the corner,
-    // leaving orphan pixels that pass 2 re-traces into spurious little loops. The
-    // test is symmetric, so deg() and the walk see the same graph.
-    const linked = (x, y, dx, dy) => {
-      if (!at(x + dx, y + dy)) return false;
-      if (dx && dy && (at(x + dx, y) || at(x, y + dy))) return false;
-      return true;
-    };
-    const deg = (x, y) => { let d = 0; for (const [dx, dy] of NB) if (linked(x, y, dx, dy)) d++; return d; };
-    const seen = new Set();
-    const key = (a, b) => a < b ? a * mask.length + b : b * mask.length + a;
-    const lines = [];
-
-    // Walk from (cx,cy) following unconsumed links until a non-degree-2 node or a
-    // dead end; returns the trailing points (excludes the given start point).
-    const walk = (cx, cy) => {
-      const pts = [];
-      while (true) {
-        let nx = -1, ny = -1;
-        for (const [dx, dy] of NB) {
-          if (!linked(cx, cy, dx, dy)) continue;
-          const x = cx + dx, y = cy + dy;
-          const k = key(cy * w + cx, y * w + x);
-          if (seen.has(k)) continue;
-          seen.add(k); nx = x; ny = y; break;
-        }
-        if (nx < 0) break;
-        pts.push([nx, ny]); cx = nx; cy = ny;
-        if (deg(cx, cy) !== 2) break;
-      }
-      return pts;
-    };
-
-    const startFrom = (x, y) => {
-      for (const [dx, dy] of NB) {
-        if (!linked(x, y, dx, dy)) continue;
-        const nx = x + dx, ny = y + dy;
-        const k = key(y * w + x, ny * w + nx);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        lines.push([[x, y], [nx, ny], ...walk(nx, ny)]);
-      }
-    };
-
-    // pass 1: open chains from endpoints/junctions
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++)
-        if (mask[y * w + x] && deg(x, y) !== 2) startFrom(x, y);
-    // pass 2: remaining closed loops
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++)
-        if (mask[y * w + x]) startFrom(x, y);
-    return lines;
-  }
-
   // Ramer–Douglas–Peucker: drop interior points that lie within `eps` of the
   // chord, collapsing pixel staircases into a few straight facets. Iterative
   // (explicit stack) so long borders don't blow the call stack.
@@ -445,52 +336,62 @@
     return out;
   }
 
-  // Draw the region/country borders as low-poly faceted lines. We scale the tinted
-  // raster to output size, binarize it, thin it to a 1px skeleton, trace that into
-  // polylines and simplify them (BORDER_SIMPLIFY) so the jagged raster collapses
-  // into clean straight facets — then stroke as vectors at BORDER_LW with round
-  // joins, matching the coastline's faceted look.
-  function drawBorders(mctx, bdLayer, v, mapW, mapH, col) {
-    const bcv = document.createElement('canvas');
-    bcv.width = mapW; bcv.height = mapH;
-    const bx = bcv.getContext('2d');
-    bx.drawImage(bdLayer.cv, v.x0 - bdLayer.ox, v.y0 - bdLayer.oy,
-      v.x1 - v.x0, v.y1 - v.y0, 0, 0, mapW, mapH);
-    const src = bx.getImageData(0, 0, mapW, mapH).data;
+  // Fetch admin boundaries intersecting the view as GeoJSON, returning a flat list
+  // of rings (each an array of [lon, lat] vertices). We pass maxAllowableOffset so
+  // the server generalises the geometry to roughly our pixel resolution — keeps the
+  // payload small and the lines naturally low-poly. A failed fetch yields [] so a
+  // borderless map still renders rather than throwing.
+  async function fetchBoundaries(v, mapW) {
+    const offset = (v.east - v.west) / mapW * 1.5;  // ~1.5 output px, in degrees
+    const params = new URLSearchParams({
+      where: '1=1',
+      geometry: [v.west, v.south, v.east, v.north].join(','),
+      geometryType: 'esriGeometryEnvelope',
+      inSR: '4326', outSR: '4326',
+      spatialRel: 'esriSpatialRelIntersects',
+      returnGeometry: 'true', outFields: '',
+      maxAllowableOffset: String(offset),
+      f: 'geojson',
+    });
+    let json;
+    try {
+      const r = await fetch(C.BOUNDARIES + '?' + params.toString());
+      json = await r.json();
+    } catch (e) { return []; }
+    const rings = [];
+    for (const f of (json && json.features) || []) {
+      const g = f.geometry;
+      if (!g) continue;
+      if (g.type === 'Polygon') for (const ring of g.coordinates) rings.push(ring);
+      else if (g.type === 'MultiPolygon')
+        for (const poly of g.coordinates) for (const ring of poly) rings.push(ring);
+    }
+    return rings;
+  }
 
-    const mask = new Uint8Array(mapW * mapH);
-    for (let p = 0; p < mask.length; p++) mask[p] = src[p * 4 + 3] > 110 ? 1 : 0;
-    thinSkeleton(mask, mapW, mapH);
-
-    const lines = tracePolylines(mask, mapW, mapH);
+  // Draw the region/country borders as low-poly faceted lines. The boundary rings
+  // arrive as lon/lat GeoJSON; we project each vertex into the output rectangle via
+  // the same Web-Mercator mapping the rest of the pipeline uses, simplify
+  // (BORDER_SIMPLIFY) for the faceted look, then stroke at BORDER_LW with round
+  // joins. No raster, no labels — the lines come straight from the geometry.
+  function drawBorders(mctx, rings, v, mapW, mapH, col) {
+    const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
     mctx.save();
     mctx.strokeStyle = rgb(col, 0.9);
     mctx.lineWidth = BORDER_LW;
     mctx.lineJoin = mctx.lineCap = 'round';
     mctx.beginPath();
-    for (const line of lines) {
-      const pts = simplify(line, BORDER_SIMPLIFY);
+    for (const ring of rings) {
+      const pts = simplify(ring.map(([lon, lat]) => [
+        (lonToX(lon, v.z) - v.x0) * sx,
+        (latToY(lat, v.z) - v.y0) * sy,
+      ]), BORDER_SIMPLIFY);
       if (pts.length < 2) continue;
-      mctx.moveTo(pts[0][0] + 0.5, pts[0][1] + 0.5);
-      for (let i = 1; i < pts.length; i++) mctx.lineTo(pts[i][0] + 0.5, pts[i][1] + 0.5);
+      mctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) mctx.lineTo(pts[i][0], pts[i][1]);
     }
     mctx.stroke();
     mctx.restore();
-  }
-
-  // Repaint every visible pixel of a transparent overlay one flat colour —
-  // turns ESRI's dark border lines into light teal ones. The solid core of each
-  // line is made fully opaque, while the anti-aliased halo around it is dropped,
-  // so borders read as thin crisp strokes rather than fat fuzzy ones.
-  function tintAlpha(data, col) {
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] > 90) {
-        data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2];
-        data[i + 3] = 255;
-      } else {
-        data[i + 3] = 0;
-      }
-    }
   }
 
   // ---- decorative overlays ---------------------------------------------------
@@ -607,8 +508,9 @@
     const PAL = ATLAS.resolvePalette(), COL = PAL.COL, WATER = PAL.WATER;
     const v = computeView(opts.lat, opts.lon, opts.areaKmW, opts.areaKmH, mapW, mapH);
 
-    // progress across all three tiled layers (hillshade, water mask, borders)
-    const total = tileCount(v) * 3;
+    // progress across the two tiled layers (hillshade, water mask) plus one tick
+    // for the vector boundary fetch
+    const total = tileCount(v) * 2 + 1;
     let done = 0;
     const tick = () => { if (opts.onProgress) opts.onProgress(++done, total); };
     if (opts.onProgress) opts.onProgress(0, total);
@@ -633,18 +535,14 @@
     drawWaterWaves(mctx, mapW, mapH, fill, WATER);
     drawCoastline(mctx, lp, COL.line);
 
-    // 4) borders: stitch, recolour, then rebuild as one uniform stroke. The ESRI
-    // raster lines vary in strength after scaling, so trusting their width gives
-    // an uneven result. Instead binarize to a clean ~1px centreline (tintAlpha),
-    // scale it to output size, and redraw it ourselves at a single consistent
-    // width (BORDER_LW) with an anti-aliased edge — a crisp core with a soft 1px
-    // falloff, so the line reads at its true width instead of as a bold slab.
-    const bdLayer = await stitch(C.TILE_BOUNDS, v, tick);
-    const bdctx = bdLayer.cv.getContext('2d');
-    const bid = bdctx.getImageData(0, 0, bdLayer.cv.width, bdLayer.cv.height);
-    tintAlpha(bid.data, COL.line);
-    bdctx.putImageData(bid, 0, 0);
-    drawBorders(mctx, bdLayer, v, mapW, mapH, COL.line);
+    // 4) borders: fetch admin boundaries as vector GeoJSON and stroke them
+    // ourselves. The old ESRI raster boundary tiles baked place-name labels into
+    // the same pixels as the lines (one fused cache, no way to split them), so
+    // skeletonising them mangled the text. Vector geometry has no labels at all
+    // and projects to crisp lines. See fetchBoundaries / drawBorders.
+    const rings = await fetchBoundaries(v, mapW);
+    tick();
+    drawBorders(mctx, rings, v, mapW, mapH, COL.line);
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);

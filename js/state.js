@@ -9,7 +9,15 @@ ATLAS.$ = (id) => document.getElementById(id);
 ATLAS.const = {
   // ESRI ArcGIS Online raster tiles (no API key). {z}/{y}/{x} = level/row/col.
   TILE_HILLSHADE: 'https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
-  TILE_BOUNDS:    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
+  // Country / region borders as VECTOR geometry (GeoJSON), not raster tiles. The
+  // old raster boundary layers (Reference/World_Boundaries_and_Places*) bake
+  // place-name labels into the same pixels as the lines, and being a single
+  // fused cache there's no sublayer/export to separate them — skeletonising the
+  // tiles mangled the labels into squiggles. This Esri Living Atlas FeatureServer
+  // is key-free, CORS-open, and supports `?f=geojson` envelope queries, so we
+  // fetch admin boundaries (admin-1: country + province/region) and stroke them
+  // ourselves — no labels, crisp lines. See fetchBoundaries / drawBorders.
+  BOUNDARIES: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Administrative_Divisions/FeatureServer/0/query',
   // Used purely as a land/water mask: OpenStreetMap's standard raster paints
   // water a distinct light blue (#aad3df) at every zoom level, while land is
   // green / beige. The hillshade itself can't tell flat sea from flat land
