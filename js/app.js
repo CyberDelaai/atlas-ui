@@ -61,6 +61,7 @@
     ATLAS.save('atlas:areaW', S.areaKmW);
     ATLAS.save('atlas:areaH', S.areaKmH);
     ATLAS.save('atlas:title', S.title);
+    ATLAS.save('atlas:cityBorders', S.cityBorders ? '1' : '0');
   }
   // Persist the rendered map itself (PNG data URL) plus the zoom shown in the
   // output readout, so a reload restores the whole working area, not just the
@@ -77,6 +78,21 @@
     $('outInfo').innerHTML =
       `<span>LAT ${S.lat}</span><span>LON ${S.lon}</span>` +
       `<span>${S.areaKmW}×${S.areaKmH} km</span><span>z${zoom}</span>`;
+  }
+
+  // ---- city-district border toggle ----
+  // Boolean ON/OFF switch (data-pos right = ON) for the OSM city/district
+  // sub-layer. Flipping it re-renders the existing map (tiles are cached, so
+  // the only network cost is the Overpass fetch — skipped entirely when off).
+  function syncDistrictToggle() {
+    const btn = $('districtToggle');
+    if (btn) btn.dataset.pos = S.cityBorders ? 'right' : 'left';
+  }
+  function toggleDistricts() {
+    S.cityBorders = !S.cityBorders;
+    syncDistrictToggle();
+    persist();
+    ATLAS.rerender();
   }
 
   // ---- locate (forward geocode a place name) ----
@@ -122,7 +138,7 @@
     try {
       const canvas = await ATLAS.renderMap({
         lat: S.lat, lon: S.lon, areaKmW: S.areaKmW, areaKmH: S.areaKmH,
-        title: S.title,
+        title: S.title, cityBorders: S.cityBorders,
         onProgress: (d, t) => setStatus(ATLAS.t('st_loading') + ` ${d}/${t}`),
       });
       lastCanvas = canvas;
@@ -345,7 +361,9 @@
     S.areaKmW = num(get('atlas:areaW', oldArea ?? S.areaKmW)) ?? S.areaKmW;
     S.areaKmH = num(get('atlas:areaH', oldArea ?? S.areaKmH)) ?? S.areaKmH;
     S.title = get('atlas:title', S.title);
+    S.cityBorders = get('atlas:cityBorders', S.cityBorders ? '1' : '0') !== '0';
     writeForm();
+    syncDistrictToggle();
     restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''));
 
     $('genBtn').addEventListener('click', render);
@@ -356,6 +374,7 @@
     $('panDownBtn').addEventListener('click', () => panBy(0, -1));
     $('panLeftBtn').addEventListener('click', () => panBy(-1, 0));
     $('panRightBtn').addEventListener('click', () => panBy(1, 0));
+    $('districtToggle').addEventListener('click', toggleDistricts);
     $('cropBtn').addEventListener('click', () => setCropMode(!cropping));
     $('stage').addEventListener('pointerdown', onCropDown);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cropping) setCropMode(false); });

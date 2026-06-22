@@ -280,6 +280,30 @@
     border: 1px solid var(--dim); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.45);
   }
 
+  /* ---- Sliding ON/OFF toggle (ported from chronos-ui .side-switch) ---- */
+  .fx-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+  .fx-label { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); text-transform: uppercase; }
+  .side-switch {
+    position: relative; height: 30px; width: 92px; background: var(--bg);
+    border: 1px solid rgba(var(--main-rgb),0.3); cursor: pointer;
+    display: flex; align-items: stretch; overflow: hidden; flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace; transition: border-color .15s, box-shadow .15s;
+  }
+  .side-switch:hover { border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb),0.25); }
+  .side-switch .thumb {
+    position: absolute; top: 0; left: 0; width: 50%; height: 100%;
+    background: color-mix(in srgb, var(--main) 22%, transparent);
+    transition: transform .22s cubic-bezier(.4,0,.2,1); z-index: 0;
+  }
+  .side-switch[data-pos="right"] .thumb { transform: translateX(100%); }
+  .side-switch .lab {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; z-index: 1; position: relative;
+    pointer-events: none; color: var(--dim); transition: color .15s .08s;
+  }
+  .side-switch[data-pos="left"] .lab.l,
+  .side-switch[data-pos="right"] .lab.r { color: var(--main); }
+
   .color-pop {
     position: fixed; z-index: 60; padding: 12px 14px;
     background: var(--panel);

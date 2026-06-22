@@ -21,7 +21,8 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   country / region borders come from ESRI's vector administrative-divisions service,
   and finer city / district borders (auto-shown once you zoom into a city-scale view)
   from OpenStreetMap's Overpass API. All sources are key-free; the lines are stroked
-  straight onto the `<canvas>` in the duotone teal palette.
+  straight onto the `<canvas>` in the duotone teal palette. The city / district
+  sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT panel.
 - **Labels** — the region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
 - **Colors** — recolor any map element (land, land shade, water, borders, frame, region)

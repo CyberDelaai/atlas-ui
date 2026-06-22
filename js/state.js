@@ -105,6 +105,7 @@ ATLAS.state = {
   areaKmH: 40,      // height of the rectangular area of interest, in km
   title: '',        // bottom title strip (auto-filled from geocode, editable)
   rendering: false, // guard against overlapping renders
+  cityBorders: true, // draw the finer OSM city/district sub-layer (area-gated)
 
   // User-pickable map colours (hex). Each drives one element of the render;
   // land / water seed a derived light->dark ramp (see ATLAS.resolvePalette in

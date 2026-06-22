@@ -640,8 +640,10 @@
 
     // 4b) finer city / district borders from OSM (admin_level 6-10), under the same
     // border colour but thinner + dimmer so they read as a sub-layer. Auto-gated to
-    // city-region-scale views (see cityLevels / CITY_MAX_KM); empty otherwise.
-    const cityRings = await fetchCityBorders(v, opts.areaKmW);
+    // city-region-scale views (see cityLevels / CITY_MAX_KM); empty otherwise. The
+    // user can also switch the whole sub-layer off (opts.cityBorders === false), in
+    // which case we skip the Overpass fetch entirely but still tick to keep progress.
+    const cityRings = opts.cityBorders === false ? [] : await fetchCityBorders(v, opts.areaKmW);
     tick();
     drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
       CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY);

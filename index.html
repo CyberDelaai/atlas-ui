@@ -1,4 +1,4 @@
-<!-- ATLAS v0.2.17 -->
+<!-- ATLAS v0.2.18 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.17</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.2.18</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -160,6 +160,17 @@
       <h2 data-i18n="h_output">// OUTPUT</h2>
       <p class="hint" data-i18n="hint_output">Free ESRI hillshade terrain + country, region &amp; city-district borders, recolored to the cyberdeck palette. Runs entirely in your browser.</p>
       <div id="outInfo" class="out-info"></div>
+
+      <!-- Toggle the finer OSM city/district border sub-layer on/off. Still
+           area-gated when on (coarse views fetch nothing); off skips the fetch. -->
+      <div class="fx-toggle">
+        <span class="fx-label" data-i18n="l_districts">CITY DISTRICTS</span>
+        <button class="side-switch" id="districtToggle" type="button" data-pos="right" aria-label="toggle city district borders">
+          <span class="thumb"></span>
+          <span class="lab l" data-i18n="lab_off">OFF</span>
+          <span class="lab r" data-i18n="lab_on">ON</span>
+        </button>
+      </div>
 
       <div class="color-controls" data-augmented-ui="tl-clip br-clip border">
         <span class="cc-head" data-i18n="l_colors">MAP COLORS</span>
