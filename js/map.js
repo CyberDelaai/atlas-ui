@@ -52,6 +52,32 @@
     };
   }
 
+  // ---- render cache ----------------------------------------------------------
+  // Re-renders repeatedly ask for the *same* data: a recolour / re-style
+  // (ATLAS.rerender) renders the identical view, and panning often revisits a
+  // bbox seen moments ago. Memoising both the stitched tile layers and the parsed
+  // border rings — each keyed on the exact request — turns those repeats into
+  // instant hits: no re-decoding browser-cached tile images, no border re-fetch,
+  // and no pressure on Overpass's 2-slot public rate limit. Each cache is a
+  // bounded LRU (a Map keeps insertion order, so the oldest key is evicted once
+  // past `max`) so a long session of distinct views can't grow memory unbounded.
+  function lru(max) {
+    const m = new Map();
+    return {
+      get(k) {
+        if (!m.has(k)) return undefined;
+        const v = m.get(k); m.delete(k); m.set(k, v); // refresh recency
+        return v;
+      },
+      set(k, v) {
+        m.set(k, v);
+        if (m.size > max) m.delete(m.keys().next().value);
+      },
+    };
+  }
+  const tileCache = lru(6);   // stitched {cv,ox,oy} layers — capped low (each is a big canvas)
+  const ringCache = lru(32);  // parsed border rings — small arrays, keyed on the request
+
   // ---- tile loading / stitching ---------------------------------------------
   function loadTile(url) {
     return new Promise((resolve) => {
@@ -76,6 +102,15 @@
     const z = v.z, n = Math.pow(2, z);
     const tx0 = Math.floor(v.x0 / TILE), tx1 = Math.floor((v.x1 - 1) / TILE);
     const ty0 = Math.floor(v.y0 / TILE), ty1 = Math.floor((v.y1 - 1) / TILE);
+    // The tile grid (layer + zoom + range) fully determines the stitched bitmap,
+    // so a cache hit skips re-decoding every tile. Still tick progress per tile so
+    // the done/total readout stays honest whether or not we hit the cache.
+    const key = urlTmpl + '@' + z + ':' + tx0 + ',' + ty0 + ',' + tx1 + ',' + ty1;
+    const cached = tileCache.get(key);
+    if (cached) {
+      if (onTile) for (let i = (tx1 - tx0 + 1) * (ty1 - ty0 + 1); i > 0; i--) onTile();
+      return cached;
+    }
     const cv = document.createElement('canvas');
     cv.width = (tx1 - tx0 + 1) * TILE;
     cv.height = (ty1 - ty0 + 1) * TILE;
@@ -93,7 +128,9 @@
       }
     }
     await Promise.all(jobs);
-    return { cv, ox: tx0 * TILE, oy: ty0 * TILE };
+    const layer = { cv, ox: tx0 * TILE, oy: ty0 * TILE };
+    tileCache.set(key, layer);
+    return layer;
   }
 
   // Crop the stitched layer down to exactly the bbox, scaled to the mapW×mapH
@@ -362,11 +399,14 @@
       maxAllowableOffset: String(offset),
       f: 'geojson',
     });
+    const qs = params.toString();
+    const hit = ringCache.get('b:' + qs);   // [] is a valid cached result; only a miss is undefined
+    if (hit) return hit;
     let json;
     try {
-      const r = await fetch(C.BOUNDARIES + '?' + params.toString());
+      const r = await fetch(C.BOUNDARIES + '?' + qs);
       json = await r.json();
-    } catch (e) { return []; }
+    } catch (e) { return []; } // don't cache failures — let the next render retry the fetch
     const rings = [];
     for (const f of (json && json.features) || []) {
       const g = f.geometry;
@@ -375,6 +415,10 @@
       else if (g.type === 'MultiPolygon')
         for (const poly of g.coordinates) for (const ring of poly) rings.push(ring);
     }
+    // Only cache a well-formed FeatureCollection; an ESRI error parses as JSON
+    // ({error:...}) with no features array — caching its empty result would
+    // permanently blank the layer for this view.
+    if (Array.isArray(json && json.features)) ringCache.set('b:' + qs, rings);
     return rings;
   }
 
@@ -400,16 +444,22 @@
     const q = '[out:json][timeout:25];'
       + 'way["boundary"="administrative"]["admin_level"~"^(' + levels + ')$"]'
       + '(' + [v.south, v.west, v.north, v.east].join(',') + ');out geom;';
+    const hit = ringCache.get('c:' + q);   // keyed on bbox + levels (the whole query)
+    if (hit) return hit;
     let json;
     try {
       const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
       json = await r.json();
-    } catch (e) { return []; }
+    } catch (e) { return []; } // don't cache failures — a re-render should re-try Overpass
     const rings = [];
     for (const el of (json && json.elements) || []) {
       if (el.type === 'way' && el.geometry && el.geometry.length > 1)
         rings.push(el.geometry.map((p) => [p.lon, p.lat]));
     }
+    // Only cache a clean Overpass result. A rate-limited / timed-out query can
+    // still return parseable JSON (no `elements`, or an error `remark`); caching
+    // that empty result would hide the city layer until the view changes.
+    if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('c:' + q, rings);
     return rings;
   }
 
