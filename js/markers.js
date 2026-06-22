@@ -344,6 +344,28 @@
     openEditor(m, layer.querySelector(`.marker[data-id="${m.id}"]`));
   }
 
+  // ---- clone -----------------------------------------------------------------
+  // Duplicate the open marker (all of its styling + label) as a new marker,
+  // nudged a little down-right of the original so it doesn't sit exactly on top,
+  // then open the editor on the copy.
+  function cloneMarker() {
+    const m = editing(); if (!m) return;
+    const copy = JSON.parse(JSON.stringify(m));
+    copy.id = uid++;
+    const mc = currentMeta();
+    if (mc) {
+      // shift by 3% of the current view so the copy lands visibly beside it
+      const f = ATLAS.latLonToPxFrac(mc.meta.view, m.lat, m.lon);
+      const ll = ATLAS.pxFracToLatLon(mc.meta.view, clamp(f.fx + 0.03, 0, 1), clamp(f.fy + 0.03, 0, 1));
+      copy.lat = +ll.lat.toFixed(5);
+      copy.lon = +ll.lon.toFixed(5);
+    }
+    S.markers.push(copy);
+    persist();
+    sync();
+    openEditor(copy, layer.querySelector(`.marker[data-id="${copy.id}"]`));
+  }
+
   // ---- editor ----------------------------------------------------------------
   function openEditor(m, el) {
     editingId = m.id;
@@ -655,6 +677,7 @@
       $('meUnderlineToggle').dataset.pos = m.underline ? 'right' : 'left';
       persist(); sync();
     });
+    $('meClone').addEventListener('click', cloneMarker);
     $('meDelete').addEventListener('click', () => {
       S.markers = S.markers.filter((x) => x.id !== editingId);
       persist(); closeEditor(); sync();

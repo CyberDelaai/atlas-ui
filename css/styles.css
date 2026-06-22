@@ -446,6 +446,24 @@
   .marker-editor input:focus, .marker-editor textarea:focus {
     outline: none; border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb), 0.35);
   }
+  /* label field: textarea + a side column of square action buttons (clone, delete) */
+  .me-label-row { display: flex; gap: 8px; align-items: flex-start; }
+  /* min-height = the side column: two 28px buttons + their 6px gap */
+  .me-label-row textarea { flex: 1; min-height: 62px; box-sizing: border-box; }
+  .me-label-side { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  .me-clone, .me-clear {
+    width: 28px; height: 28px; padding: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bg); border: 1px solid rgba(var(--main-rgb), 0.3); cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, color .15s;
+  }
+  .me-clone { color: var(--main); }
+  .me-clone:hover { border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb), 0.35); }
+  .me-clone svg { width: 18px; height: 18px; }
+  /* delete: the destructive [ X ] button, magenta to match the old DELETE accent */
+  .me-clear { color: var(--magenta); border-color: rgba(255, 0, 60, 0.4); }
+  .me-clear:hover { border-color: var(--magenta); box-shadow: 0 0 8px rgba(255, 0, 60, 0.4); }
+  .me-clear svg { width: 18px; height: 18px; }
   /* per-marker font-size picker (inside the marker editor) */
   .me-sizes { display: flex; gap: 6px; }
   .me-size {
@@ -502,7 +520,6 @@
 
   .me-actions { display: flex; gap: 10px; margin-top: 2px; }
   .me-actions .btn { flex: 1; height: 36px; padding: 0; font-size: 12px; letter-spacing: 2px; }
-  .me-del { --btn-color: var(--magenta); }
 
   /* faint fixed footer stamp (shared across cyberdeck.tools apps) */
   .footer-stamp {

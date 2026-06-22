@@ -1,4 +1,4 @@
-<!-- ATLAS v0.3.6 -->
+<!-- ATLAS v0.3.7 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.6</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.7</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -223,7 +223,17 @@
 <div class="marker-editor" id="markerEditor" hidden data-augmented-ui="tl-clip br-clip border">
   <div class="field">
     <label for="meLabel" data-i18n="l_marker_label">LABEL</label>
-    <textarea id="meLabel" rows="2" autocomplete="off"></textarea>
+    <div class="me-label-row">
+      <textarea id="meLabel" rows="2" autocomplete="off"></textarea>
+      <div class="me-label-side">
+        <button id="meClone" class="me-clone" type="button" title="Clone marker" data-i18n-title="t_marker_clone" aria-label="clone marker">
+          <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg>
+        </button>
+        <button id="meDelete" class="me-clear" type="button" title="Delete marker" data-i18n-title="b_delete" aria-label="delete marker">
+          <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>
+        </button>
+      </div>
+    </div>
   </div>
   <div class="field me-size-field">
     <label data-i18n="l_marker_fontsize">FONT SIZE</label>
@@ -260,7 +270,6 @@
     </div>
   </div>
   <div class="me-actions">
-    <button id="meDelete" class="btn btn-sm me-del" type="button" data-augmented-ui="tl-clip br-clip border" data-i18n="b_delete">DELETE</button>
     <button id="meDone" class="btn btn-sm" type="button" data-augmented-ui="tl-clip br-clip border" data-i18n="b_done">DONE</button>
   </div>
 </div>
