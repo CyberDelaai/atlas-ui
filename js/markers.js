@@ -38,7 +38,7 @@
   // keeps a clickable/draggable hit area. Geometry is defined once as a unit
   // outline centred on the origin, then scaled — shared by the DOM pin (SVG),
   // the editor's picker icons, and the export (canvas) so all three match.
-  const SHAPES = ['diamond', 'circle', 'square', 'triangle', 'star', 'none'];
+  const SHAPES = ['diamond', 'circle', 'square', 'triangle', 'triangle-down', 'star', 'none'];
   const DEF_SHAPE = 'diamond';
   function starUnit(n, ro, ri) {
     const pts = [];
@@ -53,6 +53,7 @@
     switch (shape) {
       case 'square':   return { poly: [[-0.8, -0.8], [0.8, -0.8], [0.8, 0.8], [-0.8, 0.8]] };
       case 'triangle': return { poly: [[0, -1], [0.92, 0.72], [-0.92, 0.72]] };
+      case 'triangle-down': return { poly: [[0, 1], [0.92, -0.72], [-0.92, -0.72]] };
       case 'star':     return { poly: starUnit(5, 1, 0.46) };
       case 'circle':   return { circle: true };
       case 'none':     return { none: true };
@@ -411,11 +412,21 @@
     dflt.style.background = def;        // the default chip previews the map default
     dflt.style.color = def;             // drives its .active glow (currentColor)
     const cur = (m.color || '').toLowerCase();
+    let matchedPreset = false; // did the override land on a built-in preset swatch?
     grid.querySelectorAll('.me-sw').forEach((sw) => {
       if (sw.classList.contains('me-sw-pick')) return;
       const c = (sw.dataset.color || '').toLowerCase();
-      sw.classList.toggle('active', cur ? c === cur : sw.classList.contains('me-sw-default'));
+      const on = cur ? c === cur : sw.classList.contains('me-sw-default');
+      sw.classList.toggle('active', on);
+      if (on && !sw.classList.contains('me-sw-default')) matchedPreset = true;
     });
+    // the pick chip: when the override is a custom colour (set, but neither the
+    // default nor a preset), fill it with that colour and mark it the active swatch
+    const pick = grid.querySelector('.me-sw-pick');
+    const isCustom = !!cur && !matchedPreset;
+    pick.classList.toggle('active', isCustom);
+    pick.style.background = isCustom ? m.color : '';
+    pick.style.color = isCustom ? m.color : ''; // bg + .active glow (currentColor)
     $('meColorCustom').value = /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : def;
   }
 
@@ -617,7 +628,11 @@
     // then commit a pick (or reset to the map default) to the open marker.
     const meGrid = $('meColorGrid');
     const mePick = meGrid.querySelector('.me-sw-pick');
-    (C.PALETTE || []).forEach((hex) => {
+    // drop the last preset so default + presets + pick chip total 24 — exactly
+    // three rows of eight, with the pick chip capping the third row (rather than
+    // wrapping onto a lonely fourth row). Any dropped colour is still reachable
+    // via the custom picker.
+    (C.PALETTE || []).slice(0, -1).forEach((hex) => {
       const sw = document.createElement('button');
       sw.type = 'button';
       sw.className = 'me-sw';
