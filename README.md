@@ -31,6 +31,7 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   right-angled, toggled per marker) keeps them linked. Click either to edit the
   label and an optional callout bubble, switch the label to a bare style where
   the connector line runs on under the text as its underline instead of a box,
+  pick the pin shape (diamond, circle, square, triangle, star, or none),
   recolor that one marker from its own palette (or leave it on the default),
   or delete it. Markers are anchored to
   real coordinates, so they stay put through pan / zoom / recrop / recolor, are

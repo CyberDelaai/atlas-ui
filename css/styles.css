@@ -367,16 +367,21 @@
   }
 
   .marker { position: absolute; width: 0; height: 0; --mk: var(--cyan); }
-  /* the pin is a diamond centred exactly on the anchor point */
+  /* the pin is an SVG glyph (shape per marker) centred on the anchor point */
   .marker-pin {
-    position: absolute; left: 0; top: 0; width: 14px; height: 14px;
-    transform: translate(-50%, -50%) rotate(45deg);
-    background: var(--mk); border: 2px solid #06121a;
-    box-shadow: 0 0 8px rgba(var(--main-rgb), 0.7);
+    position: absolute; left: 0; top: 0; width: 18px; height: 18px;
+    transform: translate(-50%, -50%);
     cursor: grab; pointer-events: auto;
-    transition: box-shadow .15s;
   }
-  .marker:hover .marker-pin { box-shadow: 0 0 13px rgba(var(--main-rgb), 0.95); }
+  .marker-pin .pin-svg {
+    width: 18px; height: 18px; overflow: visible; display: block;
+    filter: drop-shadow(0 0 6px rgba(var(--main-rgb), 0.7));
+    transition: filter .15s;
+  }
+  .marker-pin .pin-shape {
+    fill: var(--mk); stroke: #06121a; stroke-width: 2; stroke-linejoin: round;
+  }
+  .marker:hover .marker-pin .pin-svg { filter: drop-shadow(0 0 10px rgba(var(--main-rgb), 0.95)); }
   .marker.dragging .marker-pin { cursor: grabbing; }
   /* label + optional callout float at the marker's own offset (set inline by
      markers.reposition); draggable independently of the pin */
@@ -445,6 +450,20 @@
   .marker-editor input:focus, .marker-editor textarea:focus {
     outline: none; border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb), 0.35);
   }
+  /* per-marker shape picker (inside the marker editor) */
+  .me-shapes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .me-shape {
+    width: 28px; height: 28px; flex-shrink: 0; padding: 4px;
+    border: 1px solid var(--dim); background: transparent; color: var(--dim);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .1s, border-color .1s, box-shadow .1s, color .1s;
+  }
+  .me-shape:hover { transform: scale(1.1); color: var(--main); border-color: var(--main); }
+  .me-shape.active { color: var(--main); border-color: var(--main); box-shadow: 0 0 7px rgba(var(--main-rgb), 0.5); }
+  .me-shape .shape-icon { width: 100%; height: 100%; overflow: visible; display: block; }
+  .shape-fill { fill: currentColor; }
+  .shape-none { fill: none; stroke: currentColor; stroke-width: 1.6; }
+
   /* per-marker colour palette (inside the marker editor) */
   .me-swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .me-sw {

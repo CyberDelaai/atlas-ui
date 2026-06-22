@@ -32,6 +32,36 @@
   // to the right and up, mirroring the old fixed label position.
   const DEF_LDX = 0.06, DEF_LDY = -0.05;
 
+  // ---- pin shapes ------------------------------------------------------------
+  // The pin glyph anchored on the coordinate. 'diamond' is the historical look
+  // (and the default for older persisted markers); 'none' draws nothing but
+  // keeps a clickable/draggable hit area. Geometry is defined once as a unit
+  // outline centred on the origin, then scaled — shared by the DOM pin (SVG),
+  // the editor's picker icons, and the export (canvas) so all three match.
+  const SHAPES = ['diamond', 'circle', 'square', 'triangle', 'star', 'none'];
+  const DEF_SHAPE = 'diamond';
+  function starUnit(n, ro, ri) {
+    const pts = [];
+    for (let i = 0; i < n * 2; i++) {
+      const rad = i % 2 ? ri : ro, a = -Math.PI / 2 + (i * Math.PI) / n;
+      pts.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+    }
+    return pts;
+  }
+  // Returns { poly:[[x,y]…] } for angular shapes, { circle:true } or { none:true }.
+  function shapeGeom(shape) {
+    switch (shape) {
+      case 'square':   return { poly: [[-0.8, -0.8], [0.8, -0.8], [0.8, 0.8], [-0.8, 0.8]] };
+      case 'triangle': return { poly: [[0, -1], [0.92, 0.72], [-0.92, 0.72]] };
+      case 'star':     return { poly: starUnit(5, 1, 0.46) };
+      case 'circle':   return { circle: true };
+      case 'none':     return { none: true };
+      case 'diamond':
+      default:         return { poly: [[0, -1], [1, 0], [0, 1], [-1, 0]] };
+    }
+  }
+  const PIN_R = 8; // pin radius in SVG/canvas units
+
   let layer = null;     // #markerLayer (covers the map region)
   let lines = null;     // <svg> inside the layer carrying the connector paths
   let editor = null;    // #markerEditor popup
@@ -47,6 +77,7 @@
     if (m.line !== 'elbow') m.line = 'straight';
     m.underline = !!m.underline; // bare-underline label style (no box/background)
     if (m.color == null) m.color = null; // per-marker colour override (null = default)
+    if (!SHAPES.includes(m.shape)) m.shape = DEF_SHAPE; // pin glyph
   }
 
   // ---- persistence -----------------------------------------------------------
@@ -99,6 +130,29 @@
   }
 
   // ---- build / place the DOM overlay -----------------------------------------
+  // The pin glyph as an SVG sized to the .marker-pin box. 'none' yields an empty
+  // SVG (the .marker-pin div still carries the drag/click hit area). Fill/stroke
+  // come from CSS (.pin-shape → var(--mk)).
+  function buildPinSvg(shape) {
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'pin-svg');
+    svg.setAttribute('viewBox', '-10 -10 20 20');
+    const g = shapeGeom(shape);
+    if (g.none) return svg;
+    let node;
+    if (g.circle) {
+      node = document.createElementNS(SVGNS, 'circle');
+      node.setAttribute('r', PIN_R - 1);
+    } else {
+      node = document.createElementNS(SVGNS, 'polygon');
+      node.setAttribute('points', g.poly.map(([x, y]) =>
+        (x * PIN_R).toFixed(2) + ',' + (y * PIN_R).toFixed(2)).join(' '));
+    }
+    node.setAttribute('class', 'pin-shape');
+    svg.appendChild(node);
+    return svg;
+  }
+
   function buildMarker(m) {
     const el = document.createElement('div');
     el.className = 'marker';
@@ -106,6 +160,7 @@
 
     const pin = document.createElement('div');
     pin.className = 'marker-pin';
+    pin.appendChild(buildPinSvg(m.shape));
 
     const body = document.createElement('div');
     body.className = 'marker-body';
@@ -276,6 +331,7 @@
       line: 'straight',
       underline: false,
       color: null, // use the colors.marker default until overridden in the editor
+      shape: DEF_SHAPE,
     };
     S.markers.push(m);
     persist();
@@ -293,6 +349,7 @@
     $('meCalloutField').hidden = !on;
     $('meLineToggle').dataset.pos = m.line === 'elbow' ? 'right' : 'left';
     $('meUnderlineToggle').dataset.pos = m.underline ? 'right' : 'left';
+    syncEditorShape(m);
     syncEditorColor(m);
     editor.hidden = false;
     positionEditor(el);
@@ -301,6 +358,46 @@
     lab.select();
   }
   function closeEditor() { editor.hidden = true; editingId = null; }
+
+  // ---- per-marker shape picker (inside the editor) ---------------------------
+  // A small monochrome icon of each shape, currentColor-filled so the active
+  // button's accent flows through. 'none' shows a slashed ring (an empty glyph
+  // would be an invisible button).
+  function shapeIcon(shape) {
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'shape-icon');
+    svg.setAttribute('viewBox', '-10 -10 20 20');
+    const g = shapeGeom(shape);
+    if (g.none) {
+      const c = document.createElementNS(SVGNS, 'circle');
+      c.setAttribute('r', PIN_R - 1); c.setAttribute('class', 'shape-none');
+      const ln = document.createElementNS(SVGNS, 'line');
+      ln.setAttribute('x1', -5); ln.setAttribute('y1', 5);
+      ln.setAttribute('x2', 5); ln.setAttribute('y2', -5);
+      ln.setAttribute('class', 'shape-none');
+      svg.append(c, ln);
+      return svg;
+    }
+    let node;
+    if (g.circle) {
+      node = document.createElementNS(SVGNS, 'circle');
+      node.setAttribute('r', PIN_R - 1);
+    } else {
+      node = document.createElementNS(SVGNS, 'polygon');
+      node.setAttribute('points', g.poly.map(([x, y]) =>
+        (x * PIN_R).toFixed(2) + ',' + (y * PIN_R).toFixed(2)).join(' '));
+    }
+    node.setAttribute('class', 'shape-fill');
+    svg.appendChild(node);
+    return svg;
+  }
+  // Light the button matching marker m's current shape.
+  function syncEditorShape(m) {
+    const grid = $('meShapeGrid');
+    if (!grid) return;
+    grid.querySelectorAll('.me-shape').forEach((b) =>
+      b.classList.toggle('active', b.dataset.shape === m.shape));
+  }
 
   // ---- per-marker colour palette (inside the editor) -------------------------
   // Reflect marker `m`'s colour: light the active swatch (the "default" chip when
@@ -414,7 +511,7 @@
     const gap = 5;
     const bodyW = Math.max(labelBox ? labelBox.w : 0, cc ? cc.w : 0);
     const bodyH = (labelBox ? labelBox.h : 0) + (labelBox && cc ? gap : 0) + (cc ? cc.h : 0);
-    if (!bodyW || !bodyH) { drawPin(ctx, px, py, col); return; }
+    if (!bodyW || !bodyH) { drawPin(ctx, px, py, m, col); return; }
 
     // group centred on the label offset point (fraction of map → px)
     const cx = px + m.ldx * ctx._mapW, cy = py + m.ldy * ctx._mapH;
@@ -448,14 +545,25 @@
     }
     if (cc) drawCallout(ctx, left, y, cc, col);
 
-    drawPin(ctx, px, py, col);
+    drawPin(ctx, px, py, m, col);
   }
-  function drawPin(ctx, x, y, col) {
+  function drawPin(ctx, x, y, m, col) {
+    const g = shapeGeom(m.shape);
+    if (g.none) return;
     ctx.save();
-    ctx.translate(x, y); ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = col;
-    roundRect(ctx, -7, -7, 14, 14, 2); ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#06121a'; ctx.stroke();
+    ctx.fillStyle = col; ctx.lineWidth = 2; ctx.strokeStyle = '#06121a';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (g.circle) {
+      ctx.arc(x, y, PIN_R - 1, 0, Math.PI * 2);
+    } else {
+      g.poly.forEach(([px, py], i) => {
+        const X = x + px * PIN_R, Y = y + py * PIN_R;
+        i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+      });
+      ctx.closePath();
+    }
+    ctx.fill(); ctx.stroke();
     ctx.restore();
   }
   // Public: stamp the in-view markers onto a context using a stored canvas meta.
@@ -485,6 +593,25 @@
     build();
 
     $('addMarkerBtn').addEventListener('click', addMarker);
+
+    // shape picker: one icon button per shape; clicking switches the open marker.
+    const shapeGrid = $('meShapeGrid');
+    SHAPES.forEach((shape) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'me-shape';
+      b.dataset.shape = shape;
+      b.title = shape;
+      b.appendChild(shapeIcon(shape));
+      shapeGrid.appendChild(b);
+    });
+    shapeGrid.addEventListener('click', (e) => {
+      const b = e.target.closest('.me-shape');
+      if (!b) return;
+      const m = editing(); if (!m) return;
+      m.shape = b.dataset.shape;
+      persist(); sync(); syncEditorShape(m);
+    });
 
     // colour palette: inject the shared preset swatches ahead of the picker chip,
     // then commit a pick (or reset to the map default) to the open marker.
