@@ -446,6 +446,41 @@
   .marker-editor input:focus, .marker-editor textarea:focus {
     outline: none; border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb), 0.35);
   }
+  /* Cyberpunk scrollbar for the label textarea when text overflows — mirrors the
+     COMMLINK theme (cyan pip thumb, accent on hover, cyan-bordered arrow buttons).
+     WebKit / Blink (Chrome, Edge, Safari). */
+  .marker-editor textarea::-webkit-scrollbar { width: 8px; height: 8px; }
+  .marker-editor textarea::-webkit-scrollbar-track {
+    background: rgba(var(--main-rgb), 0.05);
+    border: 1px solid rgba(var(--main-rgb), 0.35);
+  }
+  .marker-editor textarea::-webkit-scrollbar-thumb {
+    background: var(--main); border-radius: 0; box-shadow: none;
+  }
+  .marker-editor textarea::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  .marker-editor textarea::-webkit-scrollbar-corner { background: var(--panel); }
+  .marker-editor textarea::-webkit-scrollbar-button {
+    background-color: rgba(var(--main-rgb), 0.08);
+    background-repeat: no-repeat; background-position: center; background-size: 100% 100%;
+    display: block; height: 8px; width: 8px;
+  }
+  .marker-editor textarea::-webkit-scrollbar-button:hover { background-color: rgba(var(--main-rgb), 0.2); }
+  .marker-editor textarea::-webkit-scrollbar-button:vertical:decrement {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,10 0,10' fill='%2300f0ff'/></svg>");
+  }
+  .marker-editor textarea::-webkit-scrollbar-button:vertical:increment {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='0,0 10,0 5,10' fill='%2300f0ff'/></svg>");
+  }
+  /* Hide doubled-up "single-button" variants Chromium sometimes paints */
+  .marker-editor textarea::-webkit-scrollbar-button:start:increment,
+  .marker-editor textarea::-webkit-scrollbar-button:end:decrement { display: none; }
+  /* Firefox fallback — no ::-webkit-scrollbar support, so use standard props. */
+  @supports (-moz-appearance: none) {
+    .marker-editor textarea {
+      scrollbar-color: var(--main) rgba(var(--main-rgb), 0.06);
+      scrollbar-width: thin;
+    }
+  }
   /* label field: textarea + a side column of square action buttons (clone, delete) */
   .me-label-row { display: flex; gap: 8px; align-items: flex-start; }
   /* min-height = the side column: two 28px buttons + their 6px gap */
