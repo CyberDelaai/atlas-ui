@@ -393,6 +393,16 @@
     padding: 2px 7px; white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis;
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
   }
+  /* bare style: drop the box (background / border / shadow). The underline is
+     not a border — it's the connector line continuing along this box's bottom
+     edge (see connectorPoints), so the line reads as one stroke from pin to
+     under the text. The bottom padding leaves room for it below the glyphs; a
+     text-shadow restores legibility lost with the backing gone. */
+  .marker-label.underline {
+    background: none; border: none; box-shadow: none;
+    padding: 1px 5px 3px;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+  }
   .marker-label:empty { display: none; }
   .marker-callout {
     background: rgba(6, 18, 26, 0.88); color: var(--text);

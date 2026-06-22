@@ -39,6 +39,7 @@
     if (m.ldx == null) m.ldx = DEF_LDX;
     if (m.ldy == null) m.ldy = DEF_LDY;
     if (m.line !== 'elbow') m.line = 'straight';
+    m.underline = !!m.underline; // bare-underline label style (no box/background)
   }
 
   // ---- persistence -----------------------------------------------------------
@@ -73,9 +74,18 @@
   // the box (nothing to connect). The elbow turns horizontally first, then drops
   // onto the box's nearest edge/corner — which collapses to a clean single
   // segment when the pin is directly beside / above the box.
-  function connectorPoints(P, box, mode) {
+  function connectorPoints(P, box, mode, underline) {
     const l = box.x, t = box.y, r = box.x + box.w, b = box.y + box.h;
     if (P.x >= l && P.x <= r && P.y >= t && P.y <= b) return null;
+    if (underline) {
+      // Underline style: arrive at the bottom corner nearest the pin, then run
+      // the full width of the box. That last segment *is* the label's underline,
+      // so pin → label → underline read as one continuous, unbroken line.
+      const near = Math.abs(P.x - l) <= Math.abs(P.x - r) ? l : r;
+      const far = near === l ? r : l;
+      if (mode === 'elbow') return [P, { x: near, y: P.y }, { x: near, y: b }, { x: far, y: b }];
+      return [P, { x: near, y: b }, { x: far, y: b }];
+    }
     const ax = clamp(P.x, l, r), ay = clamp(P.y, t, b); // nearest point on box
     if (mode === 'elbow') return [P, { x: ax, y: P.y }, { x: ax, y: ay }];
     return [P, { x: ax, y: ay }];
@@ -94,6 +104,7 @@
     body.className = 'marker-body';
     const label = document.createElement('div');
     label.className = 'marker-label';
+    label.classList.toggle('underline', !!m.underline);
     label.textContent = m.label || '';
     const callout = document.createElement('div');
     callout.className = 'marker-callout';
@@ -181,7 +192,7 @@
       const br = tEl.getBoundingClientRect();
       if (!br.width || !br.height) { path.style.display = 'none'; return; }
       const box = { x: br.left - lr.left, y: br.top - lr.top, w: br.width, h: br.height };
-      const pts = connectorPoints(pinPt, box, m.line);
+      const pts = connectorPoints(pinPt, box, m.line, m.underline);
       if (!pts) { path.style.display = 'none'; return; }
       path.style.display = '';
       path.setAttribute('d', pts.map((p, i) =>
@@ -252,6 +263,7 @@
       ldx: DEF_LDX,
       ldy: DEF_LDY,
       line: 'straight',
+      underline: false,
     };
     S.markers.push(m);
     persist();
@@ -268,6 +280,7 @@
     $('meCalloutToggle').dataset.pos = on ? 'right' : 'left';
     $('meCalloutField').hidden = !on;
     $('meLineToggle').dataset.pos = m.line === 'elbow' ? 'right' : 'left';
+    $('meUnderlineToggle').dataset.pos = m.underline ? 'right' : 'left';
     editor.hidden = false;
     positionEditor(el);
     const lab = $('meLabel');
@@ -359,7 +372,8 @@
     let labelBox = null;
     if (label) {
       ctx.font = "700 13px 'JetBrains Mono', monospace";
-      const padX = 7, h = 20, tw = ctx.measureText(label).width;
+      // underline boxes are a touch shorter so the underline hugs the text
+      const padX = 7, h = m.underline ? 17 : 20, tw = ctx.measureText(label).width;
       labelBox = { w: tw + padX * 2, h, padX };
     }
     const cc = hasCallout ? measureCallout(ctx, m.callout) : null;
@@ -376,7 +390,7 @@
     const connBox = labelBox
       ? { x: left, y: top, w: labelBox.w, h: labelBox.h }
       : { x: left, y: top, w: cc.w, h: cc.h };
-    const pts = connectorPoints({ x: px, y: py }, connBox, m.line);
+    const pts = connectorPoints({ x: px, y: py }, connBox, m.line, m.underline);
     if (pts) strokeConnector(ctx, pts);
 
     // ---- label box -----------------------------------------------------------
@@ -384,11 +398,18 @@
     if (labelBox) {
       ctx.font = "700 13px 'JetBrains Mono', monospace";
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = INK;
-      roundRect(ctx, left, y, labelBox.w, labelBox.h, 2); ctx.fill();
-      ctx.strokeStyle = ACCENT; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = ACCENT; ctx.textAlign = 'left';
-      ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
+      if (m.underline) {
+        // bare style: just the text — the underline is drawn by the connector,
+        // which runs along this box's bottom edge as one continuous line
+        ctx.fillStyle = ACCENT; ctx.textAlign = 'left';
+        ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
+      } else {
+        ctx.fillStyle = INK;
+        roundRect(ctx, left, y, labelBox.w, labelBox.h, 2); ctx.fill();
+        ctx.strokeStyle = ACCENT; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = ACCENT; ctx.textAlign = 'left';
+        ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
+      }
       y += labelBox.h + gap;
     }
     if (cc) drawCallout(ctx, left, y, cc);
@@ -454,6 +475,12 @@
       m.line = m.line === 'elbow' ? 'straight' : 'elbow';
       $('meLineToggle').dataset.pos = m.line === 'elbow' ? 'right' : 'left';
       persist(); reposition();
+    });
+    $('meUnderlineToggle').addEventListener('click', () => {
+      const m = editing(); if (!m) return;
+      m.underline = !m.underline;
+      $('meUnderlineToggle').dataset.pos = m.underline ? 'right' : 'left';
+      persist(); sync();
     });
     $('meDelete').addEventListener('click', () => {
       S.markers = S.markers.filter((x) => x.id !== editingId);
