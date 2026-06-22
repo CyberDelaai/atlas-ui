@@ -8,6 +8,7 @@ Items are removed from the list once they are implemented / resolved (no archive
 1. Auto district pins — query nearby places (Nominatim/Overpass) inside the frame
    and drop several amber district labels automatically, like the reference image.
 2. Islands visibility slider (hide small islands under certain threshold)
+3. Landscape editor (erase/reapply moundains, add sample mountains, buildings, etc.)
 
 ## SMALL (Z version bump)
 

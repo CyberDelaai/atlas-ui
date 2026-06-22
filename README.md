@@ -26,10 +26,12 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
 - **Labels** — the region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
 - **Land markers** — drop your own annotation pins with **+ ADD MARKER** in the
-  OUTPUT panel. Drag a marker to move it, click it to edit its label and an
-  optional callout bubble, or delete it. Markers are anchored to real
-  coordinates, so they stay put through pan / zoom / recrop / recolor, are saved
-  with the rest of your working area, and are drawn into the exported PNG.
+  OUTPUT panel. The pin and its label are independent: drag the pin to re-anchor
+  it, or drag the label to move it apart — a connector line (straight or
+  right-angled, toggled per marker) keeps them linked. Click either to edit the
+  label and an optional callout bubble, or delete it. Markers are anchored to
+  real coordinates, so they stay put through pan / zoom / recrop / recolor, are
+  saved with the rest of your working area, and are drawn into the exported PNG.
 - **Colors** — recolor any map element (land, land shade, water, borders, frame, region)
   from the **MAP COLORS** panel: each opens a palette popup of preset swatches plus a
   custom color picker, and the map restyles live without re-fetching tiles.

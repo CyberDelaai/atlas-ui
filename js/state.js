@@ -108,9 +108,11 @@ ATLAS.state = {
   cityBorders: true, // draw the finer OSM city/district sub-layer (area-gated)
 
   // Land markers: draggable annotation pins anchored to geographic coordinates,
-  // so they stay put through pan / zoom / recrop / recolour. Each is
-  // { id, lat, lon, label, callout, showCallout }. Managed by js/markers.js,
-  // persisted under atlas:markers, and drawn onto the canvas at export time.
+  // so they stay put through pan / zoom / recrop / recolour. The pin and its
+  // label are disjointed — the label floats at offset { ldx, ldy } (fraction of
+  // the map) and a connector line (line: 'straight' | 'elbow') links them. Each
+  // is { id, lat, lon, label, callout, showCallout, ldx, ldy, line }. Managed by
+  // js/markers.js, persisted under atlas:markers, drawn onto the canvas on export.
   markers: [],
 
   // User-pickable map colours (hex). Each drives one element of the render;
