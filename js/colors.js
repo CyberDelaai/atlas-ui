@@ -36,21 +36,21 @@
     const pop = $('colorPop');
     if (!rows || !pop) return;
     const grid = $('colorPopGrid');
-    const saved = $('colorPopSaved');
     const custom = $('colorPopCustom');
+    const pick = grid.querySelector('.swatch-pick-btn');
     const nameEl = $('colorPopName');
-    const customGroup = grid.querySelector('.custom-color-group');
 
     let openSlot = null; // which colour-row the popup is currently editing
 
-    // Build the preset swatch grid once, ahead of the custom-pick group.
+    // Build the preset swatch grid once, ahead of the pick chip so the single
+    // pick button stays the last cell on the last row.
     C.PALETTE.forEach((hex) => {
       const sw = document.createElement('div');
       sw.className = 'swatch';
       sw.dataset.color = hex;
       sw.style.background = hex;
       sw.style.color = hex; // drives the .active glow (box-shadow: currentColor)
-      grid.insertBefore(sw, customGroup);
+      grid.insertBefore(sw, pick);
     });
 
     // Paint a row's chip to its current colour.
@@ -60,22 +60,21 @@
     }
     function paintAllChips() { Object.keys(S.colors).forEach(paintChip); }
 
-    // Reflect the current slot inside the popup: active preset, saved-custom
-    // swatch, and the native picker's starting value.
+    // Reflect the current slot inside the popup: active preset and the single
+    // pick chip (filled with this slot's remembered custom colour, or showing
+    // the palette icon when none), plus the native picker's starting value.
     function syncPop() {
       const cur = S.colors[openSlot];
-      grid.querySelectorAll('.swatch:not(.swatch-saved)').forEach((sw) =>
+      grid.querySelectorAll('.swatch').forEach((sw) =>
         sw.classList.toggle('active', sw.dataset.color.toLowerCase() === (cur || '').toLowerCase()));
+      // The chip only reads as "chosen" while its custom colour is the active
+      // one — picking any preset reverts it to the palette icon.
       const cust = S.customColors[openSlot];
-      if (cust) {
-        saved.hidden = false;
-        saved.dataset.color = cust;
-        saved.style.background = cust;
-        saved.style.color = cust;
-        saved.classList.toggle('active', cust.toLowerCase() === (cur || '').toLowerCase());
-      } else {
-        saved.hidden = true;
-      }
+      const isCustomActive = !!cust && cust.toLowerCase() === (cur || '').toLowerCase();
+      pick.classList.toggle('has-color', isCustomActive);
+      pick.style.background = isCustomActive ? cust : '';
+      pick.style.color = isCustomActive ? cust : ''; // active glow uses currentColor
+      pick.classList.toggle('active', isCustomActive);
       custom.value = /^#[0-9a-f]{6}$/i.test(cur) ? cur : '#ffffff';
     }
 
@@ -116,11 +115,12 @@
       const btn = e.target.closest('.color-row');
       if (btn) openPop(btn.dataset.slot, btn);
     });
-    // Preset (and saved-custom) swatch click → commit + close.
+    // Preset swatch click → commit + close. (The pick chip isn't a .swatch — it
+    // opens the native picker instead, handled below.)
     grid.addEventListener('click', (e) => {
       const sw = e.target.closest('.swatch');
       if (!sw || !sw.dataset.color) return;
-      choose(sw.dataset.color, sw.classList.contains('swatch-saved'));
+      choose(sw.dataset.color, false);
       closePop();
     });
     // Native picker: live preview while dragging, remember as the slot's custom.

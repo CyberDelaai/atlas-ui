@@ -39,9 +39,10 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   real coordinates, so they stay put through pan / zoom / recrop / recolor, are
   saved with the rest of your working area, and are drawn into the exported PNG.
 - **Colors** — recolor any map element (land, land shade, water, borders, frame,
-  region, and the default marker accent) from the **MAP COLORS** panel: each opens
-  a palette popup of preset swatches plus a custom color picker, and the map
-  restyles live without re-fetching tiles.
+  region, and the default marker accent) from the slide-out **COLORS** panel (open
+  it with the tab on the right edge): each row opens a palette popup of preset
+  swatches plus a custom color picker, and the map restyles live without
+  re-fetching tiles.
 - **Export** — one click writes a high-resolution PNG.
 - **Persistent** — your inputs, color picks and the last rendered map are saved in
   the browser (`localStorage`), so reopening the page restores the whole working area

@@ -386,6 +386,25 @@
     }, 'image/png');
   }
 
+  // ---- COLORS drawer ----
+  // Off-screen right panel holding the map-colour rows; a vertical tab slides it
+  // in/out (pattern from chronos-ui). Outside-click and Escape close it, but not
+  // while the shared colour popup (anchored outside the aside) is open.
+  function wireColorsDrawer() {
+    const drawer = $('sideColors'), toggle = $('colorsToggle');
+    if (!drawer || !toggle) return;
+    toggle.addEventListener('click', (e) => { e.stopPropagation(); drawer.classList.toggle('open'); });
+    document.addEventListener('click', (e) => {
+      if (!drawer.classList.contains('open')) return;
+      if (drawer.contains(e.target) || e.target.closest('.color-pop')) return;
+      drawer.classList.remove('open');
+    });
+    document.addEventListener('keydown', (e) => {
+      // let an open colour popup swallow Escape first (handled in colors.js)
+      if (e.key === 'Escape' && $('colorPop') && $('colorPop').hidden) drawer.classList.remove('open');
+    });
+  }
+
   // ---- init ----
   function init() {
     // restore persisted coords / area + the text inputs
@@ -412,6 +431,7 @@
     $('panDownBtn').addEventListener('click', () => panBy(0, -1));
     $('panLeftBtn').addEventListener('click', () => panBy(-1, 0));
     $('panRightBtn').addEventListener('click', () => panBy(1, 0));
+    wireColorsDrawer();
     $('districtToggle').addEventListener('click', toggleDistricts);
     $('districtLandToggle').addEventListener('click', toggleDistrictLand);
     $('cropBtn').addEventListener('click', () => setCropMode(!cropping));
