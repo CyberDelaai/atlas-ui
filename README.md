@@ -29,11 +29,11 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   OUTPUT panel. The pin and its label are independent: drag the pin to re-anchor
   it, or drag the label to move it apart — a connector line (straight or
   right-angled, toggled per marker) keeps them linked. Click either to edit the
-  label and an optional callout bubble, switch the label to a bare style where
+  multi-line, centered label, switch the label to a bare style where
   the connector line runs on under the text as its underline instead of a box,
-  pick the pin shape (diamond, circle, square, triangle, star, or none),
-  recolor that one marker from its own palette (or leave it on the default),
-  or delete it. Markers are anchored to
+  set the label font size, pick the pin shape (diamond, circle, square,
+  triangle, star, or none), recolor that one marker from its own palette (or
+  leave it on the default), or delete it. Markers are anchored to
   real coordinates, so they stay put through pan / zoom / recrop / recolor, are
   saved with the rest of your working area, and are drawn into the exported PNG.
 - **Colors** — recolor any map element (land, land shade, water, borders, frame,

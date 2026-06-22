@@ -1,4 +1,4 @@
-<!-- ATLAS v0.3.5 -->
+<!-- ATLAS v0.3.6 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,7 +76,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.5</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.6</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -194,7 +194,7 @@
       <div class="marker-controls" data-augmented-ui="tl-clip br-clip border">
         <span class="cc-head" data-i18n="l_markers">MARKERS</span>
         <button id="addMarkerBtn" class="btn btn-block btn-sm" type="button" disabled data-augmented-ui="tl-clip br-clip border" data-i18n="b_add_marker">+ ADD MARKER</button>
-        <p class="hint marker-hint" data-i18n="hint_markers">Drag to move. Click a marker to edit its label &amp; callout.</p>
+        <p class="hint marker-hint" data-i18n="hint_markers">Drag to move. Click a marker to edit its label.</p>
       </div>
 
       <button id="dlBtn" class="btn btn-block" type="button" disabled data-augmented-ui="tl-clip br-clip border" data-i18n="b_export">EXPORT PNG</button>
@@ -219,22 +219,15 @@
 </div>
 
 <!-- Land-marker editor: opened by clicking a marker on the map. Anchored next to
-     the marker; edits its label / callout live and persists. See js/markers.js. -->
+     the marker; edits its label live and persists. See js/markers.js. -->
 <div class="marker-editor" id="markerEditor" hidden data-augmented-ui="tl-clip br-clip border">
   <div class="field">
     <label for="meLabel" data-i18n="l_marker_label">LABEL</label>
-    <input id="meLabel" type="text" autocomplete="off" />
+    <textarea id="meLabel" rows="2" autocomplete="off"></textarea>
   </div>
-  <div class="fx-toggle">
-    <span class="fx-label" data-i18n="l_callout">CALLOUT</span>
-    <button class="side-switch" id="meCalloutToggle" type="button" data-pos="left" aria-label="toggle callout">
-      <span class="thumb"></span>
-      <span class="lab l" data-i18n="lab_off">OFF</span>
-      <span class="lab r" data-i18n="lab_on">ON</span>
-    </button>
-  </div>
-  <div class="field" id="meCalloutField" hidden>
-    <textarea id="meCallout" rows="3" autocomplete="off"></textarea>
+  <div class="field me-size-field">
+    <label data-i18n="l_marker_fontsize">FONT SIZE</label>
+    <div class="me-sizes" id="meSizeGrid"></div>
   </div>
   <div class="fx-toggle">
     <span class="fx-label" data-i18n="l_connector">CONNECTOR</span>

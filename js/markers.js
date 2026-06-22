@@ -1,6 +1,6 @@
 // ATLAS — land markers. Draggable, editable annotation pins anchored to
 // geographic coordinates, so they stay put when the map is panned, zoomed,
-// recropped or recoloured. Each carries a label and an optional callout bubble.
+// recropped or recoloured. Each carries a multi-line, centred text label.
 //
 // Pin and label are disjointed: the pin is anchored to a lat/lon, the label
 // floats at its own offset from the pin (stored as a fraction of the map, so it
@@ -63,6 +63,13 @@
   }
   const PIN_R = 8; // pin radius in SVG/canvas units
 
+  // ---- label font sizes ------------------------------------------------------
+  // The label is rendered at a base size (11px in the DOM overlay, 13px on the
+  // export canvas); fontScale multiplies both so the two stay in proportion.
+  // Offered as a few discrete presets in the editor; M (1) is the default.
+  const SIZES = [['S', 0.85], ['M', 1], ['L', 1.25], ['XL', 1.5]];
+  const DOM_FS = 11, EXPORT_FS = 13; // base label font px (overlay / canvas)
+
   let layer = null;     // #markerLayer (covers the map region)
   let lines = null;     // <svg> inside the layer carrying the connector paths
   let editor = null;    // #markerEditor popup
@@ -79,6 +86,7 @@
     m.underline = !!m.underline; // bare-underline label style (no box/background)
     if (m.color == null) m.color = null; // per-marker colour override (null = default)
     if (!SHAPES.includes(m.shape)) m.shape = DEF_SHAPE; // pin glyph
+    if (!(typeof m.fontScale === 'number' && m.fontScale > 0)) m.fontScale = 1; // label size multiplier
   }
 
   // ---- persistence -----------------------------------------------------------
@@ -168,12 +176,9 @@
     const label = document.createElement('div');
     label.className = 'marker-label';
     label.classList.toggle('underline', !!m.underline);
+    label.style.fontSize = (DOM_FS * m.fontScale) + 'px';
     label.textContent = m.label || '';
-    const callout = document.createElement('div');
-    callout.className = 'marker-callout';
-    callout.textContent = m.callout || '';
-    callout.hidden = !(m.showCallout && m.callout);
-    body.append(label, callout);
+    body.append(label);
 
     el.append(pin, body);
     // pin and label drag independently; either, clicked, opens the editor
@@ -325,14 +330,13 @@
       lat: +c.lat.toFixed(5),
       lon: +c.lon.toFixed(5),
       label: 'MARKER ' + S.markers.length,
-      callout: '',
-      showCallout: false,
       ldx: DEF_LDX,
       ldy: DEF_LDY,
       line: 'straight',
       underline: false,
       color: null, // use the colors.marker default until overridden in the editor
       shape: DEF_SHAPE,
+      fontScale: 1, // label size multiplier (see SIZES)
     };
     S.markers.push(m);
     persist();
@@ -344,12 +348,9 @@
   function openEditor(m, el) {
     editingId = m.id;
     $('meLabel').value = m.label || '';
-    $('meCallout').value = m.callout || '';
-    const on = !!m.showCallout;
-    $('meCalloutToggle').dataset.pos = on ? 'right' : 'left';
-    $('meCalloutField').hidden = !on;
     $('meLineToggle').dataset.pos = m.line === 'elbow' ? 'right' : 'left';
     $('meUnderlineToggle').dataset.pos = m.underline ? 'right' : 'left';
+    syncEditorSize(m);
     syncEditorShape(m);
     syncEditorColor(m);
     editor.hidden = false;
@@ -359,6 +360,16 @@
     lab.select();
   }
   function closeEditor() { editor.hidden = true; editingId = null; }
+
+  // ---- per-marker font-size picker (inside the editor) -----------------------
+  // Light the preset button matching marker m's current scale (exact match —
+  // a custom restored value lights nothing, which is fine).
+  function syncEditorSize(m) {
+    const grid = $('meSizeGrid');
+    if (!grid) return;
+    grid.querySelectorAll('.me-size').forEach((b) =>
+      b.classList.toggle('active', +b.dataset.scale === m.fontScale));
+  }
 
   // ---- per-marker shape picker (inside the editor) ---------------------------
   // A small monochrome icon of each shape, currentColor-filled so the active
@@ -458,40 +469,6 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
-  // Word-wrap honouring explicit newlines.
-  function wrapText(ctx, text, maxW) {
-    const out = [];
-    for (const raw of String(text).split('\n')) {
-      if (!raw) { out.push(''); continue; }
-      let line = '';
-      for (const word of raw.split(/\s+/)) {
-        const t = line ? line + ' ' + word : word;
-        if (line && ctx.measureText(t).width > maxW) { out.push(line); line = word; }
-        else line = t;
-      }
-      out.push(line);
-    }
-    return out;
-  }
-  // Measure the callout box (its lines + size) without drawing, so the label
-  // group can be laid out as a whole and centred on the label's offset point.
-  const CALLOUT = { maxW: 200, padX: 8, padY: 6, lh: 16 };
-  function measureCallout(ctx, text) {
-    ctx.font = "500 12px 'JetBrains Mono', monospace";
-    const lines = wrapText(ctx, text, CALLOUT.maxW);
-    let tw = 0;
-    for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
-    return { lines, w: tw + CALLOUT.padX * 2, h: lines.length * CALLOUT.lh + CALLOUT.padY * 2 };
-  }
-  function drawCallout(ctx, x, y, c, col) {
-    ctx.fillStyle = 'rgba(6,18,26,0.9)';
-    roundRect(ctx, x, y, c.w, c.h, 2); ctx.fill();
-    ctx.strokeStyle = rgba(col, 0.5); ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = col; ctx.fillRect(x, y, 2, c.h); // accent left edge
-    ctx.font = "500 12px 'JetBrains Mono', monospace";
-    ctx.fillStyle = '#d8e6ee'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    c.lines.forEach((l, i) => ctx.fillText(l, x + CALLOUT.padX, y + CALLOUT.padY + i * CALLOUT.lh));
-  }
   // Stroke a connector path (array of points) with the marker accent + glow.
   function strokeConnector(ctx, pts, col) {
     ctx.save();
@@ -503,58 +480,45 @@
     ctx.stroke();
     ctx.restore();
   }
-  // Draw one marker: connector first (under everything), then the label group at
-  // its offset, then the pin diamond on top — matching the DOM stacking.
+  // Draw one marker: connector first (under everything), then the centred,
+  // possibly multi-line label box at its offset, then the pin on top — matching
+  // the DOM stacking.
   function drawOneMarker(ctx, px, py, m) {
-    const label = (m.label || '').toUpperCase();
-    const hasCallout = !!(m.showCallout && m.callout);
     const col = colorOf(m);
 
-    // ---- lay out the label group (label box + optional callout below) --------
-    let labelBox = null;
-    if (label) {
-      ctx.font = "700 13px 'JetBrains Mono', monospace";
-      // underline boxes are a touch shorter so the underline hugs the text
-      const padX = 7, h = m.underline ? 17 : 20, tw = ctx.measureText(label).width;
-      labelBox = { w: tw + padX * 2, h, padX };
-    }
-    const cc = hasCallout ? measureCallout(ctx, m.callout) : null;
-    const gap = 5;
-    const bodyW = Math.max(labelBox ? labelBox.w : 0, cc ? cc.w : 0);
-    const bodyH = (labelBox ? labelBox.h : 0) + (labelBox && cc ? gap : 0) + (cc ? cc.h : 0);
-    if (!bodyW || !bodyH) { drawPin(ctx, px, py, m, col); return; }
+    // ---- lay out the label (split on explicit newlines only, centred) -------
+    const fs = EXPORT_FS * (m.fontScale || 1);
+    ctx.font = "700 " + fs.toFixed(1) + "px 'JetBrains Mono', monospace";
+    const lines = (m.label || '').split('\n');
+    let tw = 0;
+    for (const l of lines) tw = Math.max(tw, ctx.measureText(l).width);
+    if (!tw) { drawPin(ctx, px, py, m, col); return; }
 
-    // group centred on the label offset point (fraction of map → px)
+    // box height scales with the font; underline style sits a touch tighter so
+    // the underline hugs the last line of text
+    const padX = 7, lineH = fs * 1.35;
+    const padY = (m.underline ? 2 : 4) * (fs / EXPORT_FS);
+    const boxW = tw + padX * 2, boxH = lines.length * lineH + padY * 2;
+
+    // box centred on the label offset point (fraction of map → px)
     const cx = px + m.ldx * ctx._mapW, cy = py + m.ldy * ctx._mapH;
-    const left = cx - bodyW / 2, top = cy - bodyH / 2;
+    const left = cx - boxW / 2, top = cy - boxH / 2;
 
     // ---- connector: pin → nearest edge of the label box ----------------------
-    const connBox = labelBox
-      ? { x: left, y: top, w: labelBox.w, h: labelBox.h }
-      : { x: left, y: top, w: cc.w, h: cc.h };
-    const pts = connectorPoints({ x: px, y: py }, connBox, m.line, m.underline);
+    const pts = connectorPoints({ x: px, y: py }, { x: left, y: top, w: boxW, h: boxH }, m.line, m.underline);
     if (pts) strokeConnector(ctx, pts, col);
 
-    // ---- label box -----------------------------------------------------------
-    let y = top;
-    if (labelBox) {
-      ctx.font = "700 13px 'JetBrains Mono', monospace";
-      ctx.textBaseline = 'middle';
-      if (m.underline) {
-        // bare style: just the text — the underline is drawn by the connector,
-        // which runs along this box's bottom edge as one continuous line
-        ctx.fillStyle = col; ctx.textAlign = 'left';
-        ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
-      } else {
-        ctx.fillStyle = INK;
-        roundRect(ctx, left, y, labelBox.w, labelBox.h, 2); ctx.fill();
-        ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
-        ctx.fillStyle = col; ctx.textAlign = 'left';
-        ctx.fillText(label, left + labelBox.padX, y + labelBox.h / 2 + 0.5);
-      }
-      y += labelBox.h + gap;
+    // ---- label box (centred text) -------------------------------------------
+    if (!m.underline) {
+      ctx.fillStyle = INK;
+      roundRect(ctx, left, top, boxW, boxH, 2); ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
     }
-    if (cc) drawCallout(ctx, left, y, cc, col);
+    // (underline style draws no box: the underline is the connector running
+    // along this box's bottom edge as one continuous stroke)
+    ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tx = left + boxW / 2;
+    lines.forEach((l, i) => ctx.fillText(l, tx, top + padY + lineH * (i + 0.5) + 0.5));
 
     drawPin(ctx, px, py, m, col);
   }
@@ -604,6 +568,25 @@
     build();
 
     $('addMarkerBtn').addEventListener('click', addMarker);
+
+    // font-size picker: one button per preset; clicking resizes the open marker's
+    // label (live + persisted).
+    const sizeGrid = $('meSizeGrid');
+    SIZES.forEach(([lab, scale]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'me-size';
+      b.dataset.scale = scale;
+      b.textContent = lab;
+      sizeGrid.appendChild(b);
+    });
+    sizeGrid.addEventListener('click', (e) => {
+      const b = e.target.closest('.me-size');
+      if (!b) return;
+      const m = editing(); if (!m) return;
+      m.fontScale = +b.dataset.scale;
+      persist(); sync(); syncEditorSize(m);
+    });
 
     // shape picker: one icon button per shape; clicking switches the open marker.
     const shapeGrid = $('meShapeGrid');
@@ -658,18 +641,6 @@
     $('meLabel').addEventListener('input', () => {
       const m = editing(); if (!m) return;
       m.label = $('meLabel').value;
-      persist(); sync();
-    });
-    $('meCalloutToggle').addEventListener('click', () => {
-      const m = editing(); if (!m) return;
-      m.showCallout = !m.showCallout;
-      $('meCalloutToggle').dataset.pos = m.showCallout ? 'right' : 'left';
-      $('meCalloutField').hidden = !m.showCallout;
-      persist(); sync();
-    });
-    $('meCallout').addEventListener('input', () => {
-      const m = editing(); if (!m) return;
-      m.callout = $('meCallout').value;
       persist(); sync();
     });
     $('meLineToggle').addEventListener('click', () => {

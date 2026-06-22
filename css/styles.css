@@ -383,19 +383,20 @@
   }
   .marker:hover .marker-pin .pin-svg { filter: drop-shadow(0 0 10px rgba(var(--main-rgb), 0.95)); }
   .marker.dragging .marker-pin { cursor: grabbing; }
-  /* label + optional callout float at the marker's own offset (set inline by
+  /* the label floats at the marker's own offset (set inline by
      markers.reposition); draggable independently of the pin */
   .marker-body {
     position: absolute; left: 12px; top: -10px; pointer-events: auto; cursor: grab;
-    display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
     max-width: 230px; z-index: 1;
   }
   .marker.dragging .marker-body { cursor: grabbing; }
   .marker-label {
     background: rgba(6, 18, 26, 0.9); color: var(--mk);
     border: 1px solid var(--mk);
-    font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
-    padding: 2px 7px; white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    padding: 2px 7px; max-width: 230px;
+    white-space: pre; text-align: center;
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
   }
   /* bare style: drop the box (background / border / shadow). The underline is
@@ -409,14 +410,6 @@
     text-shadow: 0 0 5px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
   }
   .marker-label:empty { display: none; }
-  .marker-callout {
-    background: rgba(6, 18, 26, 0.88); color: var(--text);
-    border: 1px solid rgba(var(--main-rgb), 0.5); border-left: 2px solid var(--mk);
-    font-size: 11px; line-height: 1.5; letter-spacing: .3px;
-    padding: 5px 8px; white-space: pre-wrap; word-break: break-word;
-    box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
-  }
-  .marker-callout[hidden] { display: none; }
 
   /* markers config section (right panel) — mirrors .color-controls */
   .marker-controls {
@@ -453,6 +446,17 @@
   .marker-editor input:focus, .marker-editor textarea:focus {
     outline: none; border-color: var(--main); box-shadow: 0 0 8px rgba(var(--main-rgb), 0.35);
   }
+  /* per-marker font-size picker (inside the marker editor) */
+  .me-sizes { display: flex; gap: 6px; }
+  .me-size {
+    flex: 1; height: 28px; padding: 0;
+    border: 1px solid var(--dim); background: transparent; color: var(--dim);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1px;
+    cursor: pointer; transition: border-color .1s, box-shadow .1s, color .1s;
+  }
+  .me-size:hover { color: var(--main); border-color: var(--main); }
+  .me-size.active { color: var(--main); border-color: var(--main); box-shadow: 0 0 7px rgba(var(--main-rgb), 0.5); }
+
   /* per-marker shape picker (inside the marker editor) */
   .me-shape-field { margin-top: 18px; }
   .me-shapes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; }
