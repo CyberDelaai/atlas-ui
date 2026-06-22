@@ -33,6 +33,18 @@
     return { lat: yToLat(y, v.z), lon: xToLon(x, v.z) };
   };
 
+  // Forward of pxFracToLatLon: project a lat/lon back to its fractional position
+  // (fx, fy each in [0,1] when on-map, origin top-left) within the rendered map
+  // region of a stored view. Lets the marker overlay place a geographic point on
+  // the displayed map and lets export draw it onto the canvas. Values outside
+  // [0,1] are off the current view.
+  ATLAS.latLonToPxFrac = function latLonToPxFrac(v, lat, lon) {
+    return {
+      fx: (lonToX(lon, v.z) - v.x0) / (v.x1 - v.x0),
+      fy: (latToY(lat, v.z) - v.y0) / (v.y1 - v.y0),
+    };
+  };
+
   // ---- geometry: rectangular ground area -> bbox + best zoom ----------------
   // A km-rectangle on the ground maps to an (almost) pixel-rectangle in Web
   // Mercator near the centre, because the projection is locally conformal — so

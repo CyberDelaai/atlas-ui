@@ -107,6 +107,12 @@ ATLAS.state = {
   rendering: false, // guard against overlapping renders
   cityBorders: true, // draw the finer OSM city/district sub-layer (area-gated)
 
+  // Land markers: draggable annotation pins anchored to geographic coordinates,
+  // so they stay put through pan / zoom / recrop / recolour. Each is
+  // { id, lat, lon, label, callout, showCallout }. Managed by js/markers.js,
+  // persisted under atlas:markers, and drawn onto the canvas at export time.
+  markers: [],
+
   // User-pickable map colours (hex). Each drives one element of the render;
   // land / water seed a derived light->dark ramp (see ATLAS.resolvePalette in
   // map.js). Defaults mirror ATLAS.const.COL so the out-of-box look is unchanged.

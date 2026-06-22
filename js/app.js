@@ -71,6 +71,9 @@
     try {
       ATLAS.save('atlas:map', canvas.toDataURL('image/png'));
       ATLAS.save('atlas:mapZoom', zoom == null ? '' : zoom);
+      // the view geometry (plain numbers) so a reload can re-anchor the markers
+      // and re-enable draw-to-recrop without re-rendering
+      ATLAS.save('atlas:mapMeta', canvas._meta ? JSON.stringify(canvas._meta) : '');
     } catch (e) {}
   }
   // The output readout below the map (rebuilt on render and on restore).
@@ -314,19 +317,24 @@
     $('zoomCtl').hidden = false; // recrop controls become usable once a map exists
     setCropMode(false);          // a fresh map cancels any in-progress draw
     updateZoomBtns();
+    if (ATLAS.markers) ATLAS.markers.reposition(); // re-anchor the marker overlay
   }
 
   // Rebuild the last rendered map from a persisted PNG data URL so a reload
   // brings back the working area (and re-enables export) without re-fetching
   // tiles. No-op when nothing was stored.
-  function restoreMap(dataUrl, zoom) {
+  function restoreMap(dataUrl, zoom, metaJson) {
     if (!dataUrl) return;
+    let meta = null;
+    try { meta = metaJson ? JSON.parse(metaJson) : null; } catch (e) {}
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       canvas.getContext('2d').drawImage(img, 0, 0);
+      // restoring the view geometry re-enables marker anchoring + draw-to-recrop
+      if (meta && meta.view) canvas._meta = meta;
       lastCanvas = canvas;
       mountCanvas(canvas);
       writeOutInfo(zoom);
@@ -336,9 +344,23 @@
   }
 
   // ---- export PNG ----
+  // Markers live as a DOM overlay (not baked into lastCanvas), so for export we
+  // composite them onto a throwaway copy. No markers / no view geometry → export
+  // the rendered canvas as-is.
+  function exportCanvas() {
+    const haveMarkers = ATLAS.markers && S.markers && S.markers.length && lastCanvas._meta;
+    if (!haveMarkers) return lastCanvas;
+    const ex = document.createElement('canvas');
+    ex.width = lastCanvas.width;
+    ex.height = lastCanvas.height;
+    const ctx = ex.getContext('2d');
+    ctx.drawImage(lastCanvas, 0, 0);
+    ATLAS.markers.drawOnto(ctx, lastCanvas._meta);
+    return ex;
+  }
   function onDownload() {
     if (!lastCanvas) return;
-    lastCanvas.toBlob((blob) => {
+    exportCanvas().toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -364,7 +386,7 @@
     S.cityBorders = get('atlas:cityBorders', S.cityBorders ? '1' : '0') !== '0';
     writeForm();
     syncDistrictToggle();
-    restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''));
+    restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''), get('atlas:mapMeta', ''));
 
     $('genBtn').addEventListener('click', render);
     $('dlBtn').addEventListener('click', onDownload);
