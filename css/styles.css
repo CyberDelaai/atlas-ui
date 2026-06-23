@@ -171,11 +171,17 @@
 
   /* right panel output readout */
   .out-info {
-    display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 4px;
+    display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 0;
     font-size: 11px; letter-spacing: 1px; color: var(--main);
   }
   .out-info:empty { display: none; }
   .out-info span { white-space: nowrap; }
+  /* Roll20 grid advice: a dimmer second readout row that hangs directly under the
+     coordinate readout (tight 6px gap so the two group), its leading ROLL20 tag
+     accented so the row reads as a labelled hint rather than more coordinates.
+     Separation from the toggle below is left to that toggle's own top margin. */
+  .roll20-info { margin: 6px 0 0; color: var(--dim); cursor: help; }
+  .roll20-info span:first-child { color: var(--accent); letter-spacing: 2px; }
 
   /* ---------- Center working area ---------- */
   .workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }

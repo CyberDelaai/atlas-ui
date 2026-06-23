@@ -45,7 +45,9 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   it with the tab on the right edge): each row opens a palette popup of preset
   swatches plus a custom color picker, and the map restyles live without
   re-fetching tiles.
-- **Export** — one click writes a high-resolution PNG.
+- **Export** — one click writes a high-resolution PNG. The OUTPUT panel also shows
+  a **ROLL20** hint — the page size (in cells) and per-cell real-world scale to set
+  in a virtual tabletop so its square grid matches this map's footprint.
 - **Persistent** — your inputs, color picks and the last rendered map are saved in
   the browser (`localStorage`), so reopening the page restores the whole working area
   without re-fetching any tiles.

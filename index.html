@@ -1,4 +1,4 @@
-<!-- ATLAS v0.3.12 -->
+<!-- ATLAS v0.3.13 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -99,7 +99,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.12</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.13</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -198,6 +198,10 @@
       <h2 data-i18n="h_output">// OUTPUT</h2>
       <p class="hint" data-i18n="hint_output">Free ESRI hillshade terrain + country, region &amp; city-district borders, recolored to the cyberdeck palette. Runs entirely in your browser.</p>
       <div id="outInfo" class="out-info"></div>
+      <!-- Suggested Roll20 (VTT) page grid that matches the map's footprint:
+           page size in cells + the real-world distance per cell. See
+           writeRoll20Info in js/app.js. -->
+      <div id="roll20Info" class="out-info roll20-info" data-i18n-title="t_roll20"></div>
 
       <!-- Toggle the finer OSM city/district border sub-layer on/off. Still
            area-gated when on (coarse views fetch nothing); off skips the fetch. -->

@@ -90,6 +90,43 @@
     $('outInfo').innerHTML =
       `<span>LAT ${S.lat}</span><span>LON ${S.lon}</span>` +
       `<span>${areaDisp(S.areaKmW)}×${areaDisp(S.areaKmH)} ${unitLabel()}</span><span>z${zoom}</span>`;
+    writeRoll20Info();
+  }
+
+  // ---- Roll20 grid advice ----
+  // The exported PNG is meant to be dropped into a virtual tabletop (Roll20),
+  // which lays a square grid over the map: the GM sets the page size in cells
+  // and a real-world distance per cell. We suggest values that make that grid
+  // line up with THIS map's footprint — a nice round distance per cell, plus the
+  // whole-number cell counts that cover the captured area. Computed in the
+  // displayed unit (km / mi) so the numbers can be typed straight into Roll20's
+  // page scale field. Refreshed by writeOutInfo, so render / restore / the units
+  // flip all keep it current.
+  function roll20Grid() {
+    const conv = S.units === 'mi' ? 1 / C.KM_PER_MI : 1; // km -> displayed unit
+    const w = S.areaKmW * conv, h = S.areaKmH * conv;
+    // pick a nice cell size (1 / 2 / 2.5 / 5 × 10^n) closest to ~1/20 of the long
+    // edge, so the longer edge lands near a ~20-cell Roll20 page
+    const raw = Math.max(w, h) / 20;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    let cell = pow, bestErr = Infinity;
+    for (const m of [1, 2, 2.5, 5]) {
+      const err = Math.abs(m * pow - raw);
+      if (err < bestErr) { bestErr = err; cell = m * pow; }
+    }
+    const fmt = (n) => (+n.toFixed(3)).toString(); // trim float noise, keep round
+    return {
+      cols: Math.max(1, Math.round(w / cell)),
+      rows: Math.max(1, Math.round(h / cell)),
+      cell: fmt(cell), unit: unitLabel(),
+    };
+  }
+  function writeRoll20Info() {
+    const g = roll20Grid();
+    // "□" reads as one grid cell; the data-i18n-title tooltip explains the row
+    $('roll20Info').innerHTML =
+      `<span>ROLL20</span><span>${g.cols} × ${g.rows}</span>` +
+      `<span>1 □ = ${g.cell} ${g.unit}</span>`;
   }
 
   // ---- city-district border toggle ----
