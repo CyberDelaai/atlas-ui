@@ -93,6 +93,17 @@
     if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
     return { fx, fy };
   }
+  // Is the (fractional) map point over sea? Reads the per-pixel water mask the
+  // renderer stashes on the canvas (1 = water; see renderMap). Districts whose
+  // admin area runs out over the water shouldn't be pickable there. Absent mask
+  // (cold reload, no live render) → treat as land so picking still works.
+  function isWaterAt(cv, fx, fy) {
+    const mask = cv._waterMask, m = cv._meta;
+    if (!mask) return false;
+    const x = Math.floor(fx * m.mapW), y = Math.floor(fy * m.mapH);
+    if (x < 0 || y < 0 || x >= m.mapW || y >= m.mapH) return false;
+    return mask[y * m.mapW + x] === 1;
+  }
 
   // ---- colour popup ----------------------------------------------------------
   let pop, grid, pick, custom, nameEl, imgBtn, imgRemoveBtn;
@@ -192,6 +203,7 @@
       if (!cv) return;
       const fr = clientToMapFrac(cv, e.clientX, e.clientY);
       if (!fr) { closePop(); return; }
+      if (isWaterAt(cv, fr.fx, fr.fy)) { closePop(); return; } // sea → not pickable
       const ll = ATLAS.pxFracToLatLon(cv._meta.view, fr.fx, fr.fy);
       const rg = pickRegion(cv._regions, ll.lon, ll.lat);
       if (rg) openPop(rg, e.clientX, e.clientY);

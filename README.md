@@ -30,9 +30,12 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
 - **District fills** — click any city / district on the map to open a colour popup
   and give that district a translucent fill (or clear it back to borders-only). The
   smallest district under the cursor wins, so clicking inside a city picks the
-  neighbourhood, not the whole city. Each pick is keyed to that OpenStreetMap
-  district, so the colour follows it through pan / zoom / recrop and is saved with
-  the rest of your working area.
+  neighbourhood, not the whole city. Clicks that land on water aren't pickable, and
+  the fill itself is always trimmed at the coastline — district admin polygons often
+  run far out to sea, so a fill is only ever painted on land (independent of the
+  **DISTRICTS: LAND ONLY** toggle, which governs the border lines). Each pick is
+  keyed to that OpenStreetMap district, so the colour follows it through
+  pan / zoom / recrop and is saved with the rest of your working area.
 - **District images** — the same district popup can attach a **custom background
   picture** to a district: pick an image, then drag to move and scroll to zoom it
   into place inside a live window cut to the district's exact shape, and hit **DONE**.

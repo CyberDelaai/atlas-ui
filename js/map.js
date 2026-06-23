@@ -533,6 +533,27 @@
       const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
       json = await r.json();
     } catch (e) { return []; } // don't cache failures — a re-render should re-try
+    // A bbox query returns every admin relation that merely *touches* the view —
+    // including neighbouring or marine zones (e.g. mainland districts, sea
+    // experimental zones) that sprawl far beyond the city being mapped. Drawn as
+    // fills/borders they bleed across the whole map. Cull a region when its
+    // bounding box is larger than the view yet lies mostly (>80%) outside it: that
+    // marks an outside area clipping the edge, never a district *of* this city. A
+    // genuine district at the edge during a pan is smaller than the view, so it's
+    // never caught.
+    const vArea = (v.east - v.west) * (v.north - v.south);
+    function bleedsIn(ways) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const w of ways) for (const [lon, lat] of w) {
+        if (lon < x0) x0 = lon; if (lon > x1) x1 = lon;
+        if (lat < y0) y0 = lat; if (lat > y1) y1 = lat;
+      }
+      const bArea = (x1 - x0) * (y1 - y0);
+      if (!(bArea > vArea)) return false; // not bigger than the view → keep
+      const ox = Math.max(0, Math.min(x1, v.east) - Math.max(x0, v.west));
+      const oy = Math.max(0, Math.min(y1, v.north) - Math.max(y0, v.south));
+      return (ox * oy) / bArea < 0.2; // <20% of it is on-screen → bleeds in
+    }
     const out = [];
     for (const el of (json && json.elements) || []) {
       if (el.type !== 'relation' || !el.members) continue;
@@ -542,7 +563,7 @@
             (m.role === 'outer' || m.role === 'inner' || !m.role))
           ways.push(m.geometry.map((p) => [p.lon, p.lat]));
       }
-      if (!ways.length) continue;
+      if (!ways.length || bleedsIn(ways)) continue;
       const t = el.tags || {};
       out.push({
         id: el.id,
@@ -613,12 +634,13 @@
       .sort((a, b) => a.level - b.level); // coarse (lower level) first
     if (!painted.length) return;
     const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
-    let layer = null, ctx = mctx;
-    if (waterMask) {
-      layer = document.createElement('canvas');
-      layer.width = mapW; layer.height = mapH;
-      ctx = layer.getContext('2d');
-    }
+    // Always build the fills on a transparent offscreen layer, then composite once.
+    // The knockout step below (clearRect within each region) must only erase other
+    // *fills*, never the map tiles already painted onto mctx — so we can't draw
+    // straight onto mctx even when there's no water mask to clip against.
+    const layer = document.createElement('canvas');
+    layer.width = mapW; layer.height = mapH;
+    const ctx = layer.getContext('2d');
     for (const rg of painted) {
       ctx.save();
       ctx.beginPath();
@@ -631,16 +653,24 @@
         }
         ctx.closePath();
       }
+      // Clip to this region, then wipe whatever was painted under it before laying
+      // down its own colour. Districts nest (city ⊃ borough ⊃ neighbourhood), so a
+      // naive translucent fill would compound where they overlap into a darker
+      // patch — looking like the districts bleed into each other. Painting coarse→
+      // fine and knocking out the underlying fill makes each area show exactly one
+      // colour at one alpha; the finer district cleanly replaces the coarser one.
+      ctx.clip('evenodd');
+      ctx.clearRect(0, 0, mapW, mapH);
       ctx.fillStyle = rgb(ATLAS.hexToArr(overrides[rg.id]), REGION_FILL_ALPHA);
-      ctx.fill('evenodd');
+      ctx.fillRect(0, 0, mapW, mapH);
       ctx.restore();
     }
     if (waterMask) {
       const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
       for (let p = 0; p < waterMask.length; p++) if (waterMask[p]) d[p * 4 + 3] = 0;
       ctx.putImageData(id, 0, 0);
-      mctx.drawImage(layer, 0, 0);
     }
+    mctx.drawImage(layer, 0, 0);
   }
 
   // ---- district background images --------------------------------------------
@@ -1023,8 +1053,14 @@
     const regions = opts.cityBorders === false ? [] : await fetchRegions(v, opts.areaKmW);
     tick();
 
-    // region fills sit UNDER every border line, so paint them before either border set
-    drawRegionFills(mctx, regions, v, mapW, mapH, opts.districtsLandOnly ? fill : null);
+    // region fills sit UNDER every border line, so paint them before either border set.
+    // Fills are ALWAYS clipped to land (low-poly water mask): many city districts —
+    // especially maritime ones like HK's Islands District — have coarse admin
+    // boundaries that run far out to sea (straight segments tens of km long), so an
+    // unclipped fill paints big blocky open-water areas. Colouring open sea is never
+    // wanted, so the clip is unconditional here; the districtsLandOnly toggle still
+    // governs the district border *lines* below.
+    drawRegionFills(mctx, regions, v, mapW, mapH, fill);
 
     // country / region (admin-1) borders, on top of the fills
     drawBorders(mctx, rings, v, mapW, mapH, COL.line);
@@ -1111,6 +1147,11 @@
     // these rings are far too heavy to store — so region picking is live only after a
     // render this session, not after a cold reload of the cached PNG.
     out._regions = regions;
+    // Per-pixel sea mask (mapW×mapH, 1 = water) so the colour-pick UI can ignore
+    // clicks that land on water — districts whose admin area runs out over the sea
+    // shouldn't be selectable there. Like _regions, kept off _meta (heavy, and only
+    // meaningful for this session's live canvas).
+    out._waterMask = fill;
     return out;
   };
 
