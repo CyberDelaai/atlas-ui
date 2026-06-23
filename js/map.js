@@ -584,20 +584,25 @@
   // `units` is 'mi' the bar is sized + labelled in miles instead.
   function drawScaleBar(ctx, rightX, cy, mapW, areaKmW, col, units) {
     const mi = units === 'mi';
-    const unit = mi ? 'mi' : 'km';
+    const unit = mi ? 'MI' : 'KM';
     const area = mi ? areaKmW / C.KM_PER_MI : areaKmW; // map width in display units
     const total = niceScale(area);
     const pxPerUnit = mapW / area;
     const barW = total * pxPerUnit;
     const segs = 4, segW = barW / segs, h = 6;
     ctx.save();
-    ctx.font = "500 11px 'JetBrains Mono', monospace";
-    const labelH = 11, labelGap = 4;        // number row sits above the bar
+    const labelFont = "500 15px 'JetBrains Mono', monospace";
+    const unitFont = "600 22px 'JetBrains Mono', monospace"; // unit reads bigger than the numbers
+    ctx.font = labelFont;
+    const labelH = 15, labelGap = 4;        // number row sits above the bar
     const blockH = labelH + labelGap + h;
     const labelBase = Math.round(cy - blockH / 2) + labelH; // baseline of numbers
     const y = labelBase + labelGap;         // top of the bar
-    const uGap = 6, uW = ctx.measureText(unit).width;
-    const x = rightX - uW - uGap - barW;    // reserve room for the unit label
+    const uGap = 12;
+    ctx.font = unitFont;
+    const uW = ctx.measureText(unit).width;  // reserve room for the larger unit label
+    ctx.font = labelFont;
+    const x = rightX - uW - uGap - barW;
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'center';
     for (let i = 0; i < segs; i++) {
@@ -611,8 +616,12 @@
     for (let i = 0; i <= segs; i++) {
       ctx.fillText(fmtKm(total / segs * i), x + i * segW, labelBase);
     }
+    // unit label: bigger, to the right of the bar, its bottom sitting level with
+    // the bottom edge of the bar
+    ctx.font = unitFont;
     ctx.textAlign = 'left';
-    ctx.fillText(unit, x + barW + uGap, labelBase);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(unit, x + barW + uGap, y + h);
     ctx.restore();
   }
 
