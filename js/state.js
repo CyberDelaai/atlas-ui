@@ -145,4 +145,16 @@ ATLAS.state = {
   // and persists across sessions. Managed by js/regions.js, persisted under
   // atlas:regionColors, applied by ATLAS.renderMap (drawRegionFills in map.js).
   regionColors: {},
+
+  // Per-district background images: { [osmRelationId]: { src, scale, ox, oy } }.
+  // src = a (downscaled) image data URL. scale = a multiplier on a cover-fit
+  // baseline (1 = the image exactly covers the district's geographic bounding box).
+  // ox / oy = pan offset as a fraction of that projected bbox (w, h). Because the
+  // transform is defined relative to the district's projected bbox, the placement
+  // survives pan / zoom / recrop just like regionColors. The image is clipped to the
+  // district's polygon and drawn on top of every other map element (terrain, water,
+  // fills, borders, buildings) but under the annotation markers. Managed by
+  // js/district-images.js, persisted under atlas:districtImages, drawn by
+  // ATLAS.renderMap (drawDistrictImages in map.js).
+  districtImages: {},
 };

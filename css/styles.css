@@ -388,6 +388,35 @@
     position: relative; color: var(--main); background: var(--bg);
     background-image: linear-gradient(135deg, transparent 44%, #fff 44%, #fff 56%, transparent 56%);
   }
+  /* Per-district background-image buttons, sitting under the region popup grid. */
+  .region-image-row { display: flex; gap: 8px; margin-top: 12px; }
+  .region-image-btn { flex: 1; }
+
+  /* ---------- District background-image placement editor ---------- */
+  /* Covers the map region (positioned like .marker-layer) while the user pans /
+     zooms a picture inside a district's polygon; sits above the markers so it
+     captures all pointer input while active. See js/district-images.js. */
+  .district-image-layer { position: absolute; z-index: 6; pointer-events: auto; }
+  .district-image-layer[hidden] { display: none; }
+  .dimg-svg { position: absolute; left: 0; top: 0; overflow: visible; cursor: grab; }
+  .dimg-svg.grabbing { cursor: grabbing; }
+  .dimg-clip-shape { fill: #fff; clip-rule: evenodd; }
+  /* dashed outline of the district edge, drawn on top so the "window" stays visible */
+  .dimg-outline {
+    fill: none; stroke: var(--main); stroke-width: 1.5; stroke-dasharray: 6 4;
+    pointer-events: none; filter: drop-shadow(0 0 4px rgba(var(--main-rgb),0.6));
+  }
+  /* control bar: hint + DONE / REMOVE / CANCEL, floating at the bottom of the map */
+  .dimg-bar {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; gap: 8px; align-items: center; padding: 8px 10px;
+    background: var(--panel); border: 1px solid rgba(var(--main-rgb),0.6);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6); white-space: nowrap;
+  }
+  .dimg-hint {
+    font-size: 10px; letter-spacing: 1px; color: var(--dim);
+    text-transform: uppercase; margin-right: 4px;
+  }
 
   /* ---------- Land markers (draggable annotation pins over the map) ---------- */
   /* The layer is positioned to cover exactly the map region of the rendered

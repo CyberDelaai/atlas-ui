@@ -90,6 +90,23 @@
   const tileCache = lru(6);   // stitched {cv,ox,oy} layers — capped low (each is a big canvas)
   const ringCache = lru(32);  // parsed border rings — small arrays, keyed on the request
 
+  // Decoded district background images, keyed on their data-URL src so a re-render
+  // (recolour / pan / zoom) reuses the already-decoded bitmap instead of decoding
+  // it again. Capped low — each entry is a full image. See drawDistrictImages.
+  const imgCache = lru(8);
+  function loadImageEl(src) {
+    const hit = imgCache.get(src);
+    if (hit) return Promise.resolve(hit);
+    return new Promise((resolve) => {
+      const img = new Image();
+      // src is a same-origin data URL, so no crossOrigin is needed and the canvas
+      // stays untainted (toDataURL export keeps working).
+      img.onload = () => { imgCache.set(src, img); resolve(img); };
+      img.onerror = () => resolve(null); // broken data URL -> just skip it
+      img.src = src;
+    });
+  }
+
   // ---- tile loading / stitching ---------------------------------------------
   function loadTile(url) {
     return new Promise((resolve) => {
@@ -626,6 +643,92 @@
     }
   }
 
+  // ---- district background images --------------------------------------------
+  // Project the lon/lat bounding box of a region's rings into the output rectangle.
+  // Web Mercator maps lon→x and lat→y independently, so a lon/lat bbox stays an
+  // axis-aligned rectangle once projected — which the placement editor relies on so
+  // its preview transform reproduces exactly here. Returns { x, y, w, h } in px.
+  function projectedBBox(rings, v, sx, sy) {
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const ring of rings) for (const [lon, lat] of ring) {
+      if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+    }
+    const x0 = (lonToX(minLon, v.z) - v.x0) * sx, x1 = (lonToX(maxLon, v.z) - v.x0) * sx;
+    const y0 = (latToY(maxLat, v.z) - v.y0) * sy, y1 = (latToY(minLat, v.z) - v.y0) * sy;
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+
+  // Trace a region's rings (projected to the output rect) as a single path and set
+  // it as the clip (even-odd, so inner holes punch through). Shared by the image
+  // draw and the on-top border re-stroke so both clip to the exact same polygon.
+  function clipToRings(ctx, rings, v, sx, sy) {
+    ctx.beginPath();
+    for (const ring of rings) {
+      if (ring.length < 3) continue;
+      for (let i = 0; i < ring.length; i++) {
+        const x = (lonToX(ring[i][0], v.z) - v.x0) * sx;
+        const y = (latToY(ring[i][1], v.z) - v.y0) * sy;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+    }
+    ctx.clip('evenodd');
+  }
+
+  // Paint each district that carries a custom background image (ATLAS.state.
+  // districtImages, keyed by OSM relation id) on top of every other map element.
+  // The image is cover-fitted to the district's projected bbox, then offset/scaled
+  // by the user's stored transform and clipped to the district's polygon (even-odd,
+  // so inner holes punch through) — exactly the math the placement editor in
+  // js/district-images.js previews. Async: each image is decoded (and cached) before
+  // it's drawn. Markers are composited later (at export), so they stay on top.
+  // Returns the regions that actually got an image, so the caller can re-stroke the
+  // border lines on top of them (the image covers the borders along the polygon edge).
+  // When `waterMask` is supplied (the per-pixel sea mask, 1 = water), the image is
+  // additionally clipped to land — admin district polygons often run well out to sea,
+  // so this trims the picture at the coastline. The mask is the same low-poly shape
+  // the coastline is traced from, so the image edge lands right on the shore.
+  async function drawDistrictImages(mctx, regions, v, mapW, mapH, waterMask) {
+    const imgs = (ATLAS.state && ATLAS.state.districtImages) || {};
+    const items = regions.filter((rg) => imgs[rg.id] && imgs[rg.id].src && rg.rings.length);
+    if (!items.length) return [];
+    const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+    const painted = [];
+    for (const rg of items) {
+      const cfg = imgs[rg.id];
+      const img = await loadImageEl(cfg.src);
+      if (!img || !img.width || !img.height) continue;
+      const bb = projectedBBox(rg.rings, v, sx, sy);
+      if (!(bb.w > 0) || !(bb.h > 0)) continue;
+      const scale = cfg.scale > 0 ? cfg.scale : 1;
+      const s0 = Math.max(bb.w / img.width, bb.h / img.height); // cover-fit baseline
+      const drawW = img.width * s0 * scale, drawH = img.height * s0 * scale;
+      const cx = bb.x + bb.w / 2 + (cfg.ox || 0) * bb.w;
+      const cy = bb.y + bb.h / 2 + (cfg.oy || 0) * bb.h;
+      // when clipping to land, paint to an offscreen layer, knock out the water
+      // pixels, then composite — mirroring drawBorders / drawRegionFills
+      let ctx = mctx, layer = null;
+      if (waterMask) {
+        layer = document.createElement('canvas');
+        layer.width = mapW; layer.height = mapH;
+        ctx = layer.getContext('2d');
+      }
+      ctx.save();
+      clipToRings(ctx, rg.rings, v, sx, sy);
+      ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+      ctx.restore();
+      if (waterMask) {
+        const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
+        for (let p = 0; p < waterMask.length; p++) if (waterMask[p]) d[p * 4 + 3] = 0;
+        ctx.putImageData(id, 0, 0);
+        mctx.drawImage(layer, 0, 0);
+      }
+      painted.push(rg);
+    }
+    return painted;
+  }
+
   // ---- buildings (2.5D) ------------------------------------------------------
   // Pull a usable height in metres from a footprint's OSM tags: an explicit
   // `height` (metres) wins, else `building:levels` x a per-storey estimate, else a
@@ -943,6 +1046,32 @@
     const buildings = showBuildings ? await fetchBuildings(v) : [];
     tick();
     drawBuildings(mctx, buildings, v, mapW, mapH, COL, opts.areaKmW);
+
+    // 4d) per-district background images: drawn last of the map layers, on top of
+    // terrain / water / fills / borders / buildings, clipped to each district's
+    // polygon. Markers are composited later (at export, on a copy), so they stay on
+    // top of the image. Like the fills, this only sees districts present in
+    // `regions`, so an image shows when its district's geometry is available.
+    const imaged = await drawDistrictImages(mctx, regions, v, mapW, mapH,
+      opts.districtsLandOnly ? fill : null);
+
+    // 4e) the image covers the line work that runs through its district, so re-stroke
+    // it on top of the image — the coastline (land/water border), the country/region
+    // borders and the city sub-layer — each clipped to the imaged district so nothing
+    // outside it is double-drawn.
+    if (imaged.length) {
+      const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+      for (const rg of imaged) {
+        mctx.save();
+        clipToRings(mctx, rg.rings, v, sx, sy);
+        drawCoastline(mctx, lp, COL.line);
+        drawBorders(mctx, rings, v, mapW, mapH, COL.line);
+        drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
+          CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
+          opts.districtsLandOnly ? fill : null);
+        mctx.restore();
+      }
+    }
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);

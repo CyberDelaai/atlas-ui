@@ -95,8 +95,17 @@
   }
 
   // ---- colour popup ----------------------------------------------------------
-  let pop, grid, pick, custom, nameEl;
+  let pop, grid, pick, custom, nameEl, imgBtn, imgRemoveBtn;
   let current = null; // region currently being edited
+
+  // Reflect the open district's image state on the SET/EDIT + REMOVE buttons.
+  function syncImageBtns() {
+    if (!imgBtn) return;
+    const di = ATLAS.districtImages;
+    const has = !!(current && di && di.has(current.id));
+    imgBtn.textContent = ATLAS.t(has ? 'b_edit_image' : 'b_set_image');
+    if (imgRemoveBtn) imgRemoveBtn.hidden = !has;
+  }
 
   function syncPop() {
     const cur = ((current && S.regionColors[current.id]) || '').toLowerCase();
@@ -121,6 +130,7 @@
     nameEl.textContent = rg.name || (ATLAS.t('region_district') + ' ' + rg.id);
     pop.hidden = false; // unhide first so we can measure it
     syncPop();
+    syncImageBtns();
     const pw = pop.offsetWidth, ph = pop.offsetHeight, m = 12;
     let left = clientX + m;
     if (left + pw > window.innerWidth - 8) left = clientX - pw - m;
@@ -153,6 +163,8 @@
     custom = $('regionPopCustom');
     pick = grid.querySelector('.swatch-pick-btn');
     nameEl = $('regionPopName');
+    imgBtn = $('regionPopImage');
+    imgRemoveBtn = $('regionPopImageRemove');
 
     // Build the preset swatch grid ahead of the pick chip, just like js/colors.js,
     // so the clear chip leads and the custom-pick chip stays the last cell.
@@ -174,6 +186,7 @@
       if (e.target.closest('.color-pop')) return;            // clicks inside a popup
       if (Math.abs(e.clientX - downX) > 6 || Math.abs(e.clientY - downY) > 6) return; // was a drag
       if (stage.classList.contains('cropping')) return;      // draw-to-recrop mode
+      if (stage.classList.contains('placing-image')) return; // district-image placement
       if (e.target.closest('.marker') || e.target.closest('.zoom-ctl')) return;
       const cv = liveMap();
       if (!cv) return;
@@ -195,6 +208,18 @@
     });
     // Native picker: live preview while dragging.
     custom.addEventListener('input', () => choose(custom.value));
+
+    // Image controls: set/edit opens the placement editor (js/district-images.js);
+    // remove clears the district's image. Both close the popup.
+    if (imgBtn) imgBtn.addEventListener('click', () => {
+      const rg = current;
+      closePop();
+      if (rg && ATLAS.districtImages) ATLAS.districtImages.begin(rg);
+    });
+    if (imgRemoveBtn) imgRemoveBtn.addEventListener('click', () => {
+      if (current && ATLAS.districtImages) ATLAS.districtImages.remove(current.id);
+      closePop();
+    });
 
     // Dismiss on outside click or Escape. A click inside the stage is left for the
     // stage handler above (which reopens for another district or closes itself).

@@ -33,6 +33,18 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   neighbourhood, not the whole city. Each pick is keyed to that OpenStreetMap
   district, so the colour follows it through pan / zoom / recrop and is saved with
   the rest of your working area.
+- **District images** — the same district popup can attach a **custom background
+  picture** to a district: pick an image, then drag to move and scroll to zoom it
+  into place inside a live window cut to the district's exact shape, and hit **DONE**.
+  The image is clipped to the district polygon and drawn on top of every other map
+  element (but under the markers); the coastline and the country / region and
+  city-district border lines are re-stroked on top of it so those edges stay crisp.
+  With **DISTRICTS: LAND ONLY** on (the default) the picture is also trimmed at the
+  coastline, since district admin polygons often run out to sea. Like the
+  colour fills it's keyed to that
+  OpenStreetMap district, so it stays anchored through pan / zoom / recrop and is
+  saved with your working area (storage is best-effort — very large images may not
+  survive a reload). Re-open the popup to **EDIT** or **REMOVE** it.
 - **Buildings** — once you zoom into a street-scale view (the shorter captured edge
   under 10 km), OpenStreetMap building footprints are drawn as faux-3D **2.5D**
   blocks, extruded by each building's tagged height (or an estimate), shaded walls
