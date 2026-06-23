@@ -27,6 +27,11 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT
   panel, and the **DISTRICTS: LAND ONLY** toggle clips those finer lines to land so
   boundaries that run out over the sea aren't drawn on the water.
+- **Buildings** — once you zoom into a street-scale view (the shorter captured edge
+  under 10 km), OpenStreetMap building footprints are drawn as faux-3D **2.5D**
+  blocks, extruded by each building's tagged height (or an estimate), shaded walls
+  under lit roofs. Wider views skip them entirely. Toggle the layer with the
+  **BUILDINGS** switch in the OUTPUT panel.
 - **Labels** — the region name and bottom title are auto-filled from a
   reverse-geocode lookup and are fully editable before export.
 - **Land markers** — drop your own annotation pins with **+ ADD MARKER** in the
@@ -41,7 +46,7 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   real coordinates, so they stay put through pan / zoom / recrop / recolor, are
   saved with the rest of your working area, and are drawn into the exported PNG.
 - **Colors** — recolor any map element (land, land shade, water, borders, frame,
-  region, and the default marker accent) from the slide-out **COLORS** panel (open
+  region, buildings, and the default marker accent) from the slide-out **COLORS** panel (open
   it with the tab on the right edge): each row opens a palette popup of preset
   swatches plus a custom color picker, and the map restyles live without
   re-fetching tiles.

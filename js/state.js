@@ -57,6 +57,7 @@ ATLAS.const = {
     line:    [156, 206, 184], // country / region border lines
     frame:   [120, 178, 158], // map frame + scale bar
     region:  [120, 170, 150], // seeds the bottom title tone
+    building:[175, 208, 192], // 2.5D building roof tone (walls derived darker)
     title:   [207, 234, 221], // bottom title text
     bg:      [6, 14, 13],     // canvas backdrop
   },
@@ -79,7 +80,7 @@ ATLAS.const = {
     '#fcee0a', '#00f0ff', '#ff003c', '#39ff14', '#ff8800', '#c800ff',
     '#00ff9d', '#ff10f0', '#ff6b6b', '#ff9f43', '#feca57', '#1dd1a1',
     '#00d2d3', '#54a0ff', '#a29bfe', '#cd84f1', '#ff9ff3', '#ffffff',
-    '#4e8474', '#092840', '#9cceb8', '#78b29e', '#78aa96',
+    '#4e8474', '#092840', '#9cceb8', '#78b29e', '#78aa96', '#afd0c0',
   ],
 };
 
@@ -109,6 +110,7 @@ ATLAS.state = {
   units: 'km',      // display unit for area + scale bar ('km' | 'mi'); storage stays km
   cityBorders: true, // draw the finer OSM city/district sub-layer (area-gated)
   districtsLandOnly: true, // clip the city/district sub-layer to land (hide lines over water)
+  buildings: true, // draw the 2.5D OSM building layer (gated to street-scale views, <10km)
 
   // Land markers: draggable annotation pins anchored to geographic coordinates,
   // so they stay put through pan / zoom / recrop / recolour. The pin and its
@@ -130,6 +132,7 @@ ATLAS.state = {
     border: '#9cceb8', // country / region border lines
     frame:  '#78b29e', // map frame + scale bar
     region: '#78aa96', // seeds the bottom title tone
+    building: '#afd0c0', // 2.5D building roof tone (walls derived darker)
     marker: '#00f0ff', // default annotation-marker accent (per-marker overridable)
   },
   // Last custom (non-preset) pick per slot, so the palette popup can re-offer it.

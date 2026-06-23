@@ -174,6 +174,7 @@
     const land   = cc.land   ? A(cc.land)   : D.hilight;
     const water  = cc.water  ? A(cc.water)  : DW.hilight;
     const region = cc.region ? A(cc.region) : D.region;
+    const building = cc.building ? A(cc.building) : D.building;
     return {
       COL: {
         // dark end of the land ramp: the picked shade, or derived from land if unset
@@ -182,6 +183,8 @@
         line:    cc.border ? A(cc.border) : D.line,
         frame:   cc.frame  ? A(cc.frame)  : D.frame,
         region:  region,
+        building:      building,           // 2.5D building roof (lit cap)
+        buildingShade: _mul(building, 0.5),// derived side-wall tone (darker)
         title:   _mix(region, [236, 247, 240], 0.62), // bottom title: lightened region
         bg:      D.bg,
       },
@@ -287,6 +290,17 @@
   const CITY_BORDER_ALPHA = 0.55;
   const CITY_SIMPLIFY = 2;
   const CITY_MAX_KM = 160;
+  // Buildings (the 2.5D OSM footprint layer). Only fetched/drawn when the captured
+  // area is street-scale — when the shorter edge is under BUILDING_MAX_KM — so a
+  // city-or-wider view shows none (and never hits Overpass for tens of thousands of
+  // footprints). Each footprint is raised by its tagged height (or a per-storey /
+  // flat fallback), exaggerated so blocks still read at map scale.
+  const BUILDING_MAX_KM = 10;   // show buildings only when min(areaW,areaH) < this
+  const BUILDING_DEFAULT_M = 8; // assumed height for an untagged footprint
+  const BUILDING_LEVEL_M = 3;   // metres per `building:levels` storey
+  const BUILDING_EXAG = 1.1;    // height exaggeration so blocks read at this scale
+  const BUILDING_MIN_PX = 3;    // skip footprints whose projected bbox is tinier
+  const BUILDING_LEAN = 0.4;    // horizontal lean of the extrusion (0 = straight up)
   function lowPolyWater(water, w, h, step) {
     const gw = Math.ceil(w / step), gh = Math.ceil(h / step);
 
@@ -518,6 +532,124 @@
     }
   }
 
+  // ---- buildings (2.5D) ------------------------------------------------------
+  // Pull a usable height in metres from a footprint's OSM tags: an explicit
+  // `height` (metres) wins, else `building:levels` x a per-storey estimate, else a
+  // flat default so untagged buildings still extrude to something.
+  function buildingHeight(tags) {
+    if (tags) {
+      const h = parseFloat(tags.height);
+      if (isFinite(h) && h > 0) return h;
+      const lv = parseFloat(tags['building:levels']);
+      if (isFinite(lv) && lv > 0) return lv * BUILDING_LEVEL_M;
+    }
+    return BUILDING_DEFAULT_M;
+  }
+
+  // Fetch building footprints intersecting the view as { ring:[[lon,lat]...],
+  // h:metres }. Plain `building` ways are footprints directly; relations (courtyard
+  // / multipolygon buildings) contribute their outer-role member ways, each tagged
+  // with the relation's height. Same Overpass endpoint + `out geom;` shape + LRU
+  // cache as the city-border layer; [] on any failure so the map still renders.
+  async function fetchBuildings(v) {
+    const bbox = [v.south, v.west, v.north, v.east].join(',');
+    const q = '[out:json][timeout:25];('
+      + 'way["building"](' + bbox + ');'
+      + 'relation["building"](' + bbox + ');'
+      + ');out geom;';
+    const hit = ringCache.get('bld:' + q);   // [] is a valid cached result
+    if (hit) return hit;
+    let json;
+    try {
+      const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
+      json = await r.json();
+    } catch (e) { return []; } // don't cache failures — a re-render should re-try
+    const out = [];
+    for (const el of (json && json.elements) || []) {
+      const h = buildingHeight(el.tags);
+      if (el.type === 'way' && el.geometry && el.geometry.length > 2) {
+        out.push({ ring: el.geometry.map((p) => [p.lon, p.lat]), h });
+      } else if (el.type === 'relation' && el.members) {
+        for (const m of el.members)
+          if (m.type === 'way' && m.role === 'outer' && m.geometry && m.geometry.length > 2)
+            out.push({ ring: m.geometry.map((p) => [p.lon, p.lat]), h });
+      }
+    }
+    // Only cache a clean Overpass result (see fetchCityBorders for the same guard).
+    if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('bld:' + q, out);
+    return out;
+  }
+
+  // Draw the building footprints as faux-3D blocks. Each footprint is projected with
+  // the same Web-Mercator mapping as the rest of the pipeline, raised by an
+  // extrusion vector proportional to its height, and drawn as a prism: the
+  // camera-facing side walls in a shaded tone topped by a lit roof cap. Blocks are
+  // painter-sorted back (higher on screen) to front so nearer ones occlude farther
+  // ones. Height in metres -> px uses the map's own ground scale, so blocks shrink
+  // naturally as the captured area grows.
+  function drawBuildings(ctx, buildings, v, mapW, mapH, COL, areaKmW) {
+    if (!buildings.length) return;
+    const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+    const pxPerM = mapW / (areaKmW * 1000);     // ground metres -> output px
+    const roof = COL.building, wall = COL.buildingShade;
+    const edge = _mul(roof, 0.55);              // crisp low-poly outline tone
+
+    // Project each footprint to screen, drop off-map / sub-pixel ones, and keep a
+    // centroid y + extrusion vector (ex, ey) for the sort and the prism build.
+    const items = [];
+    for (const b of buildings) {
+      const n = b.ring.length, p = new Array(n);
+      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, cy = 0;
+      for (let i = 0; i < n; i++) {
+        const x = (lonToX(b.ring[i][0], v.z) - v.x0) * sx;
+        const y = (latToY(b.ring[i][1], v.z) - v.y0) * sy;
+        p[i] = [x, y]; cy += y;
+        if (x < minx) minx = x; if (x > maxx) maxx = x;
+        if (y < miny) miny = y; if (y > maxy) maxy = y;
+      }
+      if (maxx < 0 || maxy < 0 || minx > mapW || miny > mapH) continue; // off-map
+      if (maxx - minx < BUILDING_MIN_PX && maxy - miny < BUILDING_MIN_PX) continue;
+      const hPx = b.h * pxPerM * BUILDING_EXAG;
+      items.push({ p, cy: cy / n, ex: hPx * BUILDING_LEAN, ey: -hPx });
+    }
+    items.sort((a, b) => a.cy - b.cy); // back (smaller y) first; front paints over
+
+    ctx.save();
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.lineWidth = 1;
+    for (const it of items) {
+      const p = it.p, n = p.length, ex = it.ex, ey = it.ey;
+      // signed area (screen space) -> winding, so the outward normal sign is known
+      let area = 0;
+      for (let i = 0, j = n - 1; i < n; j = i++)
+        area += p[j][0] * p[i][1] - p[i][0] * p[j][1];
+      const flip = area < 0 ? -1 : 1;
+      // side walls: draw only the camera-facing ones (outward normal pointing
+      // against the extrusion vector) so back walls don't poke through the roof
+      ctx.fillStyle = rgb(wall, 0.92);
+      ctx.strokeStyle = rgb(edge, 0.5);
+      for (let i = 0; i < n; i++) {
+        const a = p[i], b = p[(i + 1) % n];
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        if ((dy * flip) * ex + (-dx * flip) * ey >= 0) continue; // back-facing
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        ctx.lineTo(b[0] + ex, b[1] + ey); ctx.lineTo(a[0] + ex, a[1] + ey);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+      }
+      // roof cap
+      ctx.beginPath();
+      ctx.moveTo(p[0][0] + ex, p[0][1] + ey);
+      for (let i = 1; i < n; i++) ctx.lineTo(p[i][0] + ex, p[i][1] + ey);
+      ctx.closePath();
+      ctx.fillStyle = rgb(roof, 0.95);
+      ctx.strokeStyle = rgb(edge, 0.7);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // ---- decorative overlays ---------------------------------------------------
   const rgb = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a == null ? 1 : a})`;
 
@@ -638,7 +770,7 @@
   }
 
   // ---- public: render the whole thing ---------------------------------------
-  // opts: { lat, lon, areaKmW, areaKmH, title, units, cityBorders, districtsLandOnly, onProgress(done,total) }
+  // opts: { lat, lon, areaKmW, areaKmH, title, units, cityBorders, districtsLandOnly, buildings, onProgress(done,total) }
   ATLAS.renderMap = async function renderMap(opts) {
     const pad = C.PAD, strip = C.STRIP;
     const { mapW, mapH } = fitMapPx(opts.areaKmW, opts.areaKmH);
@@ -646,8 +778,8 @@
     const v = computeView(opts.lat, opts.lon, opts.areaKmW, opts.areaKmH, mapW, mapH);
 
     // progress across the two tiled layers (hillshade, water mask) plus one tick
-    // each for the region and city vector boundary fetches
-    const total = tileCount(v) * 2 + 2;
+    // each for the region, city, and building vector fetches
+    const total = tileCount(v) * 2 + 3;
     let done = 0;
     const tick = () => { if (opts.onProgress) opts.onProgress(++done, total); };
     if (opts.onProgress) opts.onProgress(0, total);
@@ -693,6 +825,17 @@
     drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
       CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
       opts.districtsLandOnly ? fill : null);
+
+    // 4c) buildings: OSM footprints extruded into 2.5D blocks, drawn on top of the
+    // terrain + borders. Gated to street-scale views — only when the shorter captured
+    // edge is under BUILDING_MAX_KM — so a city-or-wider view fetches nothing. The
+    // user can also switch the layer off (opts.buildings === false); either way we
+    // still tick so the progress readout stays honest.
+    const showBuildings = opts.buildings !== false &&
+      Math.min(opts.areaKmW, opts.areaKmH) < BUILDING_MAX_KM;
+    const buildings = showBuildings ? await fetchBuildings(v) : [];
+    tick();
+    drawBuildings(mctx, buildings, v, mapW, mapH, COL, opts.areaKmW);
 
     // 5) compose final canvas (map + margins + bottom strip)
     await (document.fonts && document.fonts.ready);

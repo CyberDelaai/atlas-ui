@@ -1,4 +1,4 @@
-<!-- ATLAS v0.3.13 -->
+<!-- ATLAS v0.4.0 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -81,6 +81,7 @@
         <button class="color-row" type="button" data-slot="border"><span class="cr-name" data-i18n="c_border">BORDERS</span><span class="cr-chip"></span></button>
         <button class="color-row" type="button" data-slot="frame"><span class="cr-name" data-i18n="c_frame">FRAME</span><span class="cr-chip"></span></button>
         <button class="color-row" type="button" data-slot="region"><span class="cr-name" data-i18n="c_region">REGION</span><span class="cr-chip"></span></button>
+        <button class="color-row" type="button" data-slot="building"><span class="cr-name" data-i18n="c_building">BUILDINGS</span><span class="cr-chip"></span></button>
         <button class="color-row" type="button" data-slot="marker"><span class="cr-name" data-i18n="c_marker">MARKER</span><span class="cr-chip"></span></button>
       </div>
     </div>
@@ -99,7 +100,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.13</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.0</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -219,6 +220,17 @@
       <div class="fx-toggle">
         <span class="fx-label" data-i18n="l_districts_land">DISTRICTS: LAND ONLY</span>
         <button class="side-switch" id="districtLandToggle" type="button" data-pos="right" aria-label="keep city district borders off the water">
+          <span class="thumb"></span>
+          <span class="lab l" data-i18n="lab_off">OFF</span>
+          <span class="lab r" data-i18n="lab_on">ON</span>
+        </button>
+      </div>
+
+      <!-- Toggle the 2.5D OSM building layer. Only drawn when the captured area is
+           street-scale (shorter edge < 10 km); wider views fetch nothing. -->
+      <div class="fx-toggle">
+        <span class="fx-label" data-i18n="l_buildings">BUILDINGS</span>
+        <button class="side-switch" id="buildingsToggle" type="button" data-pos="right" aria-label="toggle 2.5D buildings">
           <span class="thumb"></span>
           <span class="lab l" data-i18n="lab_off">OFF</span>
           <span class="lab r" data-i18n="lab_on">ON</span>

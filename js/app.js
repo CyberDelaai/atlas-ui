@@ -71,6 +71,7 @@
     ATLAS.save('atlas:units', S.units);
     ATLAS.save('atlas:cityBorders', S.cityBorders ? '1' : '0');
     ATLAS.save('atlas:districtsLand', S.districtsLandOnly ? '1' : '0');
+    ATLAS.save('atlas:buildings', S.buildings ? '1' : '0');
   }
   // Persist the rendered map itself (PNG data URL) plus the zoom shown in the
   // output readout, so a reload restores the whole working area, not just the
@@ -153,6 +154,20 @@
   function toggleDistrictLand() {
     S.districtsLandOnly = !S.districtsLandOnly;
     syncDistrictLandToggle();
+    persist();
+    ATLAS.rerender();
+  }
+
+  // ---- 2.5D buildings toggle ----
+  // ON/OFF switch for the OSM building layer. Still area-gated when on (only
+  // street-scale views fetch footprints); off skips the Overpass fetch entirely.
+  function syncBuildingsToggle() {
+    const btn = $('buildingsToggle');
+    if (btn) btn.dataset.pos = S.buildings ? 'right' : 'left';
+  }
+  function toggleBuildings() {
+    S.buildings = !S.buildings;
+    syncBuildingsToggle();
     persist();
     ATLAS.rerender();
   }
@@ -240,6 +255,7 @@
       const canvas = await ATLAS.renderMap({
         lat: S.lat, lon: S.lon, areaKmW: S.areaKmW, areaKmH: S.areaKmH,
         title: S.title, units: S.units, cityBorders: S.cityBorders, districtsLandOnly: S.districtsLandOnly,
+        buildings: S.buildings,
         onProgress: (d, t) => setStatus(ATLAS.t('st_loading') + ` ${d}/${t}`),
       });
       lastCanvas = canvas;
@@ -503,11 +519,13 @@
     S.units = get('atlas:units', S.units) === 'mi' ? 'mi' : 'km';
     S.cityBorders = get('atlas:cityBorders', S.cityBorders ? '1' : '0') !== '0';
     S.districtsLandOnly = get('atlas:districtsLand', S.districtsLandOnly ? '1' : '0') !== '0';
+    S.buildings = get('atlas:buildings', S.buildings ? '1' : '0') !== '0';
     updateUnitLabels(); // set the (KM)/(MI) suffix + input bounds before writeForm
     writeForm();
     syncUnitsToggle();
     syncDistrictToggle();
     syncDistrictLandToggle();
+    syncBuildingsToggle();
     restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''), get('atlas:mapMeta', ''));
 
     $('genBtn').addEventListener('click', render);
@@ -522,6 +540,7 @@
     $('unitsToggle').addEventListener('click', toggleUnits);
     $('districtToggle').addEventListener('click', toggleDistricts);
     $('districtLandToggle').addEventListener('click', toggleDistrictLand);
+    $('buildingsToggle').addEventListener('click', toggleBuildings);
     $('cropBtn').addEventListener('click', () => setCropMode(!cropping));
     $('stage').addEventListener('pointerdown', onCropDown);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cropping) setCropMode(false); });
