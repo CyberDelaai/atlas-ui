@@ -14,7 +14,9 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
 ## How it works
 
 - **Coordinates + area** — type a latitude / longitude and the area's width and
-  height in km, or use **FIND PLACE** to geocode a name into coordinates.
+  height, or use **FIND PLACE** to geocode a name into coordinates. The **UNITS**
+  toggle switches the area inputs and the rendered scale bar between **KM** and
+  **MI** (the map itself is unchanged — only what's shown and entered).
 - **Recrop / zoom** — the **+ / −** controls on the map recrop it around the same
   centre (zoom in for more detail, out for a wider view) and re-render.
 - **Terrain + borders** — relief comes from ESRI's free `World_Hillshade` tiles;

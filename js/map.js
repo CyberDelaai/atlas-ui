@@ -578,13 +578,17 @@
   function fmtKm(n) { return (n % 1 === 0 ? n.toString() : n.toFixed(1)); }
 
   // Draws the scale bar so its whole block (number row above + bar below)
-  // is vertically centred on `cy`, and its rightmost ink (the trailing "km"
+  // is vertically centred on `cy`, and its rightmost ink (the trailing unit
   // label) ends at `rightX` — so it mirrors the title's left margin instead of
-  // letting "km" spill into the page margin.
-  function drawScaleBar(ctx, rightX, cy, mapW, areaKmW, col) {
-    const total = niceScale(areaKmW);
-    const pxPerKm = mapW / areaKmW;
-    const barW = total * pxPerKm;
+  // letting the unit spill into the page margin. The area is stored in km; when
+  // `units` is 'mi' the bar is sized + labelled in miles instead.
+  function drawScaleBar(ctx, rightX, cy, mapW, areaKmW, col, units) {
+    const mi = units === 'mi';
+    const unit = mi ? 'mi' : 'km';
+    const area = mi ? areaKmW / C.KM_PER_MI : areaKmW; // map width in display units
+    const total = niceScale(area);
+    const pxPerUnit = mapW / area;
+    const barW = total * pxPerUnit;
     const segs = 4, segW = barW / segs, h = 6;
     ctx.save();
     ctx.font = "500 11px 'JetBrains Mono', monospace";
@@ -592,8 +596,8 @@
     const blockH = labelH + labelGap + h;
     const labelBase = Math.round(cy - blockH / 2) + labelH; // baseline of numbers
     const y = labelBase + labelGap;         // top of the bar
-    const kmGap = 6, kmW = ctx.measureText('km').width;
-    const x = rightX - kmW - kmGap - barW;  // reserve room for the "km" label
+    const uGap = 6, uW = ctx.measureText(unit).width;
+    const x = rightX - uW - uGap - barW;    // reserve room for the unit label
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'center';
     for (let i = 0; i < segs; i++) {
@@ -608,7 +612,7 @@
       ctx.fillText(fmtKm(total / segs * i), x + i * segW, labelBase);
     }
     ctx.textAlign = 'left';
-    ctx.fillText('km', x + barW + kmGap, labelBase);
+    ctx.fillText(unit, x + barW + uGap, labelBase);
     ctx.restore();
   }
 
@@ -625,7 +629,7 @@
   }
 
   // ---- public: render the whole thing ---------------------------------------
-  // opts: { lat, lon, areaKmW, areaKmH, title, onProgress(done,total) }
+  // opts: { lat, lon, areaKmW, areaKmH, title, units, cityBorders, districtsLandOnly, onProgress(done,total) }
   ATLAS.renderMap = async function renderMap(opts) {
     const pad = C.PAD, strip = C.STRIP;
     const { mapW, mapH } = fitMapPx(opts.areaKmW, opts.areaKmH);
@@ -708,11 +712,40 @@
       ctx.fillText(opts.title.toUpperCase(), pad, cy + 1);
       ctx.restore();
     }
-    drawScaleBar(ctx, pad + mapW, cy, mapW, opts.areaKmW, COL.frame);
+    drawScaleBar(ctx, pad + mapW, cy, mapW, opts.areaKmW, COL.frame, opts.units);
 
     // Stash the view geometry + map-region placement so the UI can map a
     // rectangle drawn over the map back to coordinates (draw-to-recrop).
-    out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW), view: v, mapW, mapH, pad };
+    out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW), view: v, mapW, mapH, pad,
+      areaKmW: opts.areaKmW, areaKmH: opts.areaKmH };
     return out;
+  };
+
+  // Re-label the bottom strip (title + scale bar) on an already-rendered canvas,
+  // in place — no tiles, no border fetches. Used by the km/mi units toggle, which
+  // only changes how the scale bar is sized + labelled, not the map pixels. The
+  // strip sits on the flat COL.bg backdrop (bg is never user-tinted), so we can
+  // clear that row and redraw it. opts: { title, units }. Returns false if the
+  // canvas has no geometry meta (e.g. a restored map missing its view).
+  ATLAS.redrawScaleStrip = function redrawScaleStrip(canvas, opts) {
+    const m = canvas && canvas._meta;
+    if (!m || m.areaKmW == null) return false;
+    const COL = ATLAS.resolvePalette().COL;
+    const pad = m.pad, mapW = m.mapW, mapH = m.mapH, strip = C.STRIP;
+    const ctx = canvas.getContext('2d');
+    // clear the label row (strip + the final margin below it) back to the backdrop
+    ctx.fillStyle = rgb(COL.bg, 1);
+    ctx.fillRect(0, mapH + pad * 2, canvas.width, strip + pad);
+    const cy = mapH + pad * 2 + strip / 2;
+    if (opts.title) {
+      ctx.save();
+      ctx.font = "500 18px 'JetBrains Mono', monospace";
+      ctx.fillStyle = rgb(COL.title, 0.95);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(opts.title.toUpperCase(), pad, cy + 1);
+      ctx.restore();
+    }
+    drawScaleBar(ctx, pad + mapW, cy, mapW, m.areaKmW, COL.frame, opts.units);
+    return true;
   };
 })(window.ATLAS);

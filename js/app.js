@@ -11,6 +11,13 @@
 
   // ---- helpers ----
   const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+  // Area is always stored in km; these convert to/from the chosen display unit.
+  const round1 = (n) => Math.round(n * 10) / 10;
+  // km -> shown value, rounded to each unit's input granularity (km: whole, step 1;
+  // mi: 1 decimal, step 0.1) so a km<->mi round-trip never surfaces float drift.
+  const areaDisp = (km) => (S.units === 'mi' ? round1(km / C.KM_PER_MI) : Math.round(km));
+  const dispToKm = (v) => (S.units === 'mi' ? v * C.KM_PER_MI : v);            // shown value -> km
+  const unitLabel = () => (S.units === 'mi' ? 'mi' : 'km');
   function setStatus(msg, kind) {
     const el = $('status');
     if (!el) return;
@@ -43,15 +50,15 @@
     S.lat = num($('latInput').value) ?? S.lat;
     S.lon = num($('lonInput').value) ?? S.lon;
     const w = num($('areaInputW').value), h = num($('areaInputH').value);
-    if (w && w > 0) S.areaKmW = clampKm(w);
-    if (h && h > 0) S.areaKmH = clampKm(h);
+    if (w && w > 0) S.areaKmW = clampKm(dispToKm(w));
+    if (h && h > 0) S.areaKmH = clampKm(dispToKm(h));
     S.title = $('titleInput').value.trim();
   }
   function writeForm() {
     $('latInput').value = S.lat;
     $('lonInput').value = S.lon;
-    $('areaInputW').value = S.areaKmW;
-    $('areaInputH').value = S.areaKmH;
+    $('areaInputW').value = areaDisp(S.areaKmW);
+    $('areaInputH').value = areaDisp(S.areaKmH);
     $('titleInput').value = S.title;
     updateZoomBtns();
   }
@@ -61,6 +68,7 @@
     ATLAS.save('atlas:areaW', S.areaKmW);
     ATLAS.save('atlas:areaH', S.areaKmH);
     ATLAS.save('atlas:title', S.title);
+    ATLAS.save('atlas:units', S.units);
     ATLAS.save('atlas:cityBorders', S.cityBorders ? '1' : '0');
     ATLAS.save('atlas:districtsLand', S.districtsLandOnly ? '1' : '0');
   }
@@ -81,7 +89,7 @@
   function writeOutInfo(zoom) {
     $('outInfo').innerHTML =
       `<span>LAT ${S.lat}</span><span>LON ${S.lon}</span>` +
-      `<span>${S.areaKmW}×${S.areaKmH} km</span><span>z${zoom}</span>`;
+      `<span>${areaDisp(S.areaKmW)}×${areaDisp(S.areaKmH)} ${unitLabel()}</span><span>z${zoom}</span>`;
   }
 
   // ---- city-district border toggle ----
@@ -110,6 +118,45 @@
     syncDistrictLandToggle();
     persist();
     ATLAS.rerender();
+  }
+
+  // ---- km / miles units toggle ----
+  // Display-only: the area inputs, their (KM)/(MI) suffix, the output readout and
+  // the rendered map's scale bar switch unit, but storage stays in km. Flipping
+  // reads the current inputs in the OLD unit (→ km), then redisplays in the new
+  // one and relabels the on-map scale bar in place — no network re-render, since
+  // only the scale bar's sizing/label changes, not the map pixels.
+  function updateUnitLabels() {
+    const u = unitLabel().toUpperCase();
+    document.querySelectorAll('.area-unit').forEach((el) => { el.textContent = u; });
+    // keep the number inputs' bounds + step in the displayed unit (km range is 1–600)
+    const max = S.units === 'mi' ? Math.round(600 / C.KM_PER_MI) : 600;
+    const step = S.units === 'mi' ? '0.1' : '1';
+    ['areaInputW', 'areaInputH'].forEach((id) => { $(id).max = max; $(id).step = step; });
+  }
+  function syncUnitsToggle() {
+    const btn = $('unitsToggle');
+    if (btn) btn.dataset.pos = S.units === 'mi' ? 'right' : 'left';
+  }
+  function toggleUnits() {
+    readForm();                       // capture the current inputs (in the old unit) as km
+    S.units = S.units === 'mi' ? 'km' : 'mi';
+    syncUnitsToggle();
+    updateUnitLabels();
+    writeForm();                      // redisplay the same km area in the new unit
+    persist();
+    // relabel the on-map scale bar instantly; re-persist + refresh the readout so
+    // the change survives a reload. No map yet → nothing to redraw.
+    if (!lastCanvas) return;
+    const redrawn = ATLAS.redrawScaleStrip &&
+      ATLAS.redrawScaleStrip(lastCanvas, { title: S.title, units: S.units });
+    if (redrawn) {
+      const z = lastCanvas._meta.zoom;
+      writeOutInfo(z);
+      persistMap(lastCanvas, z);
+    } else {
+      ATLAS.rerender(); // map persisted before area meta existed — full re-render
+    }
   }
 
   // ---- locate (forward geocode a place name) ----
@@ -155,7 +202,7 @@
     try {
       const canvas = await ATLAS.renderMap({
         lat: S.lat, lon: S.lon, areaKmW: S.areaKmW, areaKmH: S.areaKmH,
-        title: S.title, cityBorders: S.cityBorders, districtsLandOnly: S.districtsLandOnly,
+        title: S.title, units: S.units, cityBorders: S.cityBorders, districtsLandOnly: S.districtsLandOnly,
         onProgress: (d, t) => setStatus(ATLAS.t('st_loading') + ` ${d}/${t}`),
       });
       lastCanvas = canvas;
@@ -380,7 +427,7 @@
       const a = document.createElement('a');
       const tag = (S.title || 'map').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       a.href = url;
-      a.download = `atlas-${tag || 'map'}-${S.areaKmW}x${S.areaKmH}km.png`;
+      a.download = `atlas-${tag || 'map'}-${areaDisp(S.areaKmW)}x${areaDisp(S.areaKmH)}${unitLabel()}.png`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }, 'image/png');
@@ -416,9 +463,12 @@
     S.areaKmW = num(get('atlas:areaW', oldArea ?? S.areaKmW)) ?? S.areaKmW;
     S.areaKmH = num(get('atlas:areaH', oldArea ?? S.areaKmH)) ?? S.areaKmH;
     S.title = get('atlas:title', S.title);
+    S.units = get('atlas:units', S.units) === 'mi' ? 'mi' : 'km';
     S.cityBorders = get('atlas:cityBorders', S.cityBorders ? '1' : '0') !== '0';
     S.districtsLandOnly = get('atlas:districtsLand', S.districtsLandOnly ? '1' : '0') !== '0';
+    updateUnitLabels(); // set the (KM)/(MI) suffix + input bounds before writeForm
     writeForm();
+    syncUnitsToggle();
     syncDistrictToggle();
     syncDistrictLandToggle();
     restoreMap(get('atlas:map', ''), get('atlas:mapZoom', ''), get('atlas:mapMeta', ''));
@@ -432,6 +482,7 @@
     $('panLeftBtn').addEventListener('click', () => panBy(-1, 0));
     $('panRightBtn').addEventListener('click', () => panBy(1, 0));
     wireColorsDrawer();
+    $('unitsToggle').addEventListener('click', toggleUnits);
     $('districtToggle').addEventListener('click', toggleDistricts);
     $('districtLandToggle').addEventListener('click', toggleDistrictLand);
     $('cropBtn').addEventListener('click', () => setCropMode(!cropping));

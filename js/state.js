@@ -37,6 +37,7 @@ ATLAS.const = {
   GEOCODE:  'https://nominatim.openstreetmap.org/search',
   REVERSE:  'https://nominatim.openstreetmap.org/reverse',
 
+  KM_PER_MI: 1.609344, // exact kilometres in one statute mile (km<->mi display)
   MAX_ZOOM: 16,    // ESRI hillshade detail cap
   MAP_SIZE: 1024,  // longer rendered map edge, in px (export resolution)
   PAD: 30,         // canvas margin around the map
@@ -105,6 +106,7 @@ ATLAS.state = {
   areaKmH: 40,      // height of the rectangular area of interest, in km
   title: '',        // bottom title strip (auto-filled from geocode, editable)
   rendering: false, // guard against overlapping renders
+  units: 'km',      // display unit for area + scale bar ('km' | 'mi'); storage stays km
   cityBorders: true, // draw the finer OSM city/district sub-layer (area-gated)
   districtsLandOnly: true, // clip the city/district sub-layer to land (hide lines over water)
 

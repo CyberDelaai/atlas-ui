@@ -66,7 +66,7 @@
     // Version lives in 3 spots: this const, the #tagVersion span in index.html, and
     // the line-1 `<!-- ATLAS v… -->` comment. Bump them all in sync with:
     //   python3 bump_version.py {x|y|z}
-    const VER = ' // v0.3.10';
+    const VER = ' // v0.3.11';
     const CHARS = '!@#$%&*<>{}[]/|01ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     let commitCount = '';
 

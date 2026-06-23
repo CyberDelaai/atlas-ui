@@ -1,4 +1,4 @@
-<!-- ATLAS v0.3.10 -->
+<!-- ATLAS v0.3.11 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -99,7 +99,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.10</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.3.11</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -131,13 +131,24 @@
 
       <div class="row">
         <div class="field">
-          <label for="areaInputW" data-i18n="l_area_w">WIDTH (KM)</label>
+          <label for="areaInputW"><span data-i18n="l_area_w">WIDTH</span> (<span class="area-unit">KM</span>)</label>
           <input id="areaInputW" type="number" step="1" min="1" max="600" placeholder="40" />
         </div>
         <div class="field">
-          <label for="areaInputH" data-i18n="l_area_h">HEIGHT (KM)</label>
+          <label for="areaInputH"><span data-i18n="l_area_h">HEIGHT</span> (<span class="area-unit">KM</span>)</label>
           <input id="areaInputH" type="number" step="1" min="1" max="600" placeholder="40" />
         </div>
+      </div>
+
+      <!-- Display unit for the area inputs + the rendered scale bar. Storage stays
+           in km; KM (left) / MI (right) only changes what's shown and entered. -->
+      <div class="fx-toggle">
+        <span class="fx-label" data-i18n="l_units">UNITS</span>
+        <button class="side-switch" id="unitsToggle" type="button" data-pos="left" aria-label="distance units">
+          <span class="thumb"></span>
+          <span class="lab l" data-i18n="lab_km">KM</span>
+          <span class="lab r" data-i18n="lab_mi">MI</span>
+        </button>
       </div>
 
       <hr class="divider" />
