@@ -24,7 +24,7 @@ ATLAS.const = {
   // districts and neighbourhoods (admin_level 6-10). It's key-free and serves
   // `Access-Control-Allow-Origin: *`, and we only ask for `out geom;` JSON (ways
   // with their node coordinates inline) — so each way drops straight into the same
-  // lon/lat ring pipeline the ESRI borders use. See fetchCityBorders / drawBorders.
+  // lon/lat ring pipeline the ESRI borders use. See fetchRegions / drawBorders.
   CITY_BOUNDARIES: 'https://overpass-api.de/api/interpreter',
   // Used purely as a land/water mask: OpenStreetMap's standard raster paints
   // water a distinct light blue (#aad3df) at every zoom level, while land is
@@ -137,4 +137,12 @@ ATLAS.state = {
   },
   // Last custom (non-preset) pick per slot, so the palette popup can re-offer it.
   customColors: {},
+
+  // Per-region / per-district fill overrides: { [osmRelationId]: hex }. A clicked
+  // city-district region (the OSM admin_level 6-10 layer) gets a translucent fill
+  // in its chosen colour; unlisted regions render borders-only as before. Keyed on
+  // the stable OSM relation id so the colour follows that district across pan / zoom
+  // and persists across sessions. Managed by js/regions.js, persisted under
+  // atlas:regionColors, applied by ATLAS.renderMap (drawRegionFills in map.js).
+  regionColors: {},
 };

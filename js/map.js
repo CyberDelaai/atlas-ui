@@ -290,6 +290,10 @@
   const CITY_BORDER_ALPHA = 0.55;
   const CITY_SIMPLIFY = 2;
   const CITY_MAX_KM = 160;
+  // Translucent fill painted under the borders for any district the user has
+  // clicked + colour-picked (ATLAS.state.regionColors). Kept low so the duotone
+  // terrain still reads through the tint. Same area gating as the city sub-layer.
+  const REGION_FILL_ALPHA = 0.42;
   // Buildings (the 2.5D OSM footprint layer). Only fetched/drawn when the captured
   // area is street-scale — when the shorter edge is under BUILDING_MAX_KM — so a
   // city-or-wider view shows none (and never hits Overpass for tens of thousands of
@@ -459,34 +463,81 @@
     return null;
   }
 
-  // Fetch the finer city / district borders from OSM Overpass. Each returned way is
-  // an admin boundary segment whose node coordinates come back inline (`out geom;`),
-  // so we map it straight to a [lon, lat] ring the same drawBorders consumes. Gated
-  // by area (see cityLevels) and, like fetchBoundaries, returns [] on any failure so
-  // the map still renders without the layer.
-  async function fetchCityBorders(v, areaKm) {
+  // Stitch a relation's boundary ways (each an [lon,lat] polyline, returned in no
+  // particular order/direction) into closed rings: start from an unused way and
+  // keep appending whichever remaining way shares the current tail endpoint,
+  // reversing it when joined tail-to-tail, until the ring closes. Admin multipolygons
+  // (a region made of several arcs, plus inner holes) fall out as several rings, which
+  // the even-odd fill / hit-test then treat correctly. Endpoints are matched with a
+  // small epsilon since they come from identical OSM node coordinates.
+  function assembleRings(ways) {
+    const eps = 1e-7;
+    const near = (a, b) => Math.abs(a[0] - b[0]) < eps && Math.abs(a[1] - b[1]) < eps;
+    const segs = ways.filter((w) => w && w.length > 1).map((w) => w.slice());
+    const used = new Array(segs.length).fill(false);
+    const rings = [];
+    for (let i = 0; i < segs.length; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      const ring = segs[i].slice();
+      let grew = true;
+      while (grew && !near(ring[0], ring[ring.length - 1])) {
+        grew = false;
+        const tail = ring[ring.length - 1];
+        for (let j = 0; j < segs.length; j++) {
+          if (used[j]) continue;
+          const s = segs[j], a = s[0], b = s[s.length - 1];
+          if (near(tail, a)) { for (let k = 1; k < s.length; k++) ring.push(s[k]); used[j] = true; grew = true; break; }
+          if (near(tail, b)) { for (let k = s.length - 2; k >= 0; k--) ring.push(s[k]); used[j] = true; grew = true; break; }
+        }
+      }
+      if (ring.length >= 4) rings.push(ring);
+    }
+    return rings;
+  }
+
+  // Fetch the clickable city-district regions as whole OSM admin RELATIONS, so each
+  // carries a stable id + name and closed geometry we can fill and hit-test (rather
+  // than the loose, identity-less boundary ways the country/region layer strokes).
+  // Same Overpass endpoint, area gating (cityLevels) and LRU cache as the border
+  // layers; [] on any failure. Each region is { id, name, level, ways:[[lon,lat]…],
+  // rings:[[lon,lat]…] } — `ways` feed the district sub-layer line strokes, `rings`
+  // (assembled, closed) drive the fills and the point-in-region tests.
+  async function fetchRegions(v, areaKm) {
     const levels = cityLevels(areaKm);
     if (!levels) return [];
     const q = '[out:json][timeout:25];'
-      + 'way["boundary"="administrative"]["admin_level"~"^(' + levels + ')$"]'
+      + 'relation["boundary"="administrative"]["admin_level"~"^(' + levels + ')$"]'
       + '(' + [v.south, v.west, v.north, v.east].join(',') + ');out geom;';
-    const hit = ringCache.get('c:' + q);   // keyed on bbox + levels (the whole query)
+    const hit = ringCache.get('rg:' + q);   // [] is a valid cached result
     if (hit) return hit;
     let json;
     try {
       const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
       json = await r.json();
-    } catch (e) { return []; } // don't cache failures — a re-render should re-try Overpass
-    const rings = [];
+    } catch (e) { return []; } // don't cache failures — a re-render should re-try
+    const out = [];
     for (const el of (json && json.elements) || []) {
-      if (el.type === 'way' && el.geometry && el.geometry.length > 1)
-        rings.push(el.geometry.map((p) => [p.lon, p.lat]));
+      if (el.type !== 'relation' || !el.members) continue;
+      const ways = [];
+      for (const m of el.members) {
+        if (m.type === 'way' && m.geometry && m.geometry.length > 1 &&
+            (m.role === 'outer' || m.role === 'inner' || !m.role))
+          ways.push(m.geometry.map((p) => [p.lon, p.lat]));
+      }
+      if (!ways.length) continue;
+      const t = el.tags || {};
+      out.push({
+        id: el.id,
+        name: t['name:en'] || t.name || '',
+        level: +t.admin_level || 0,
+        ways,
+        rings: assembleRings(ways),
+      });
     }
-    // Only cache a clean Overpass result. A rate-limited / timed-out query can
-    // still return parseable JSON (no `elements`, or an error `remark`); caching
-    // that empty result would hide the city layer until the view changes.
-    if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('c:' + q, rings);
-    return rings;
+    // Only cache a clean Overpass result (see fetchBuildings for the same guard).
+    if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('rg:' + q, out);
+    return out;
   }
 
   // Draw the region/country borders as low-poly faceted lines. The boundary rings
@@ -525,6 +576,49 @@
     ctx.restore();
     if (waterMask) {
       // erase line pixels that fall on water, then stamp the land-only lines down
+      const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
+      for (let p = 0; p < waterMask.length; p++) if (waterMask[p]) d[p * 4 + 3] = 0;
+      ctx.putImageData(id, 0, 0);
+      mctx.drawImage(layer, 0, 0);
+    }
+  }
+
+  // Paint a translucent fill under the borders for each region the user has
+  // colour-picked (ATLAS.state.regionColors, keyed by OSM relation id). Each
+  // region's assembled rings are projected with the same Web-Mercator mapping and
+  // filled with the even-odd rule so inner holes punch through. Coarser regions
+  // (lower admin_level) paint first so a nested district's colour lands on top.
+  // Like drawBorders, an optional water mask clips the fill to land. Regions with
+  // no override draw nothing — the default look is borders-only, unchanged.
+  function drawRegionFills(mctx, regions, v, mapW, mapH, waterMask) {
+    const overrides = (ATLAS.state && ATLAS.state.regionColors) || {};
+    const painted = regions.filter((rg) => overrides[rg.id] && rg.rings.length)
+      .sort((a, b) => a.level - b.level); // coarse (lower level) first
+    if (!painted.length) return;
+    const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+    let layer = null, ctx = mctx;
+    if (waterMask) {
+      layer = document.createElement('canvas');
+      layer.width = mapW; layer.height = mapH;
+      ctx = layer.getContext('2d');
+    }
+    for (const rg of painted) {
+      ctx.save();
+      ctx.beginPath();
+      for (const ring of rg.rings) {
+        if (ring.length < 3) continue;
+        for (let i = 0; i < ring.length; i++) {
+          const x = (lonToX(ring[i][0], v.z) - v.x0) * sx;
+          const y = (latToY(ring[i][1], v.z) - v.y0) * sy;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+      }
+      ctx.fillStyle = rgb(ATLAS.hexToArr(overrides[rg.id]), REGION_FILL_ALPHA);
+      ctx.fill('evenodd');
+      ctx.restore();
+    }
+    if (waterMask) {
       const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
       for (let p = 0; p < waterMask.length; p++) if (waterMask[p]) d[p * 4 + 3] = 0;
       ctx.putImageData(id, 0, 0);
@@ -575,7 +669,7 @@
             out.push({ ring: m.geometry.map((p) => [p.lon, p.lat]), h });
       }
     }
-    // Only cache a clean Overpass result (see fetchCityBorders for the same guard).
+    // Only cache a clean Overpass result (see fetchRegions for the same guard).
     if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('bld:' + q, out);
     return out;
   }
@@ -811,17 +905,30 @@
     // and projects to crisp lines. See fetchBoundaries / drawBorders.
     const rings = await fetchBoundaries(v, mapW);
     tick();
+
+    // 4b) finer city / district regions from OSM (admin_level 6-10), fetched as whole
+    // admin RELATIONS so each carries a stable id + name + closed geometry (see
+    // fetchRegions). The relations' member ways stroke the district sub-layer lines —
+    // thinner + dimmer than the country borders, so they read as a sub-layer — exactly
+    // as the old loose-way layer did; their assembled rings additionally let the user
+    // click a district and give it a translucent fill (drawRegionFills, keyed on
+    // ATLAS.state.regionColors). Auto-gated to city-region-scale views (cityLevels /
+    // CITY_MAX_KM); empty otherwise, and skipped entirely (no fetch) when the user
+    // switches the sub-layer off (opts.cityBorders === false). We still tick either way.
+    // When opts.districtsLandOnly is set, the water mask clips both the fills and the
+    // lines to land — district boundaries that run out over the sea are hidden.
+    const regions = opts.cityBorders === false ? [] : await fetchRegions(v, opts.areaKmW);
+    tick();
+
+    // region fills sit UNDER every border line, so paint them before either border set
+    drawRegionFills(mctx, regions, v, mapW, mapH, opts.districtsLandOnly ? fill : null);
+
+    // country / region (admin-1) borders, on top of the fills
     drawBorders(mctx, rings, v, mapW, mapH, COL.line);
 
-    // 4b) finer city / district borders from OSM (admin_level 6-10), under the same
-    // border colour but thinner + dimmer so they read as a sub-layer. Auto-gated to
-    // city-region-scale views (see cityLevels / CITY_MAX_KM); empty otherwise. The
-    // user can also switch the whole sub-layer off (opts.cityBorders === false), in
-    // which case we skip the Overpass fetch entirely but still tick to keep progress.
-    // When opts.districtsLandOnly is set, pass the water mask so the sub-layer lines
-    // are clipped to land — district boundaries that run out over the sea are hidden.
-    const cityRings = opts.cityBorders === false ? [] : await fetchCityBorders(v, opts.areaKmW);
-    tick();
+    // the district sub-layer lines, stroked from each region's member ways
+    const cityRings = [];
+    for (const rg of regions) for (const w of rg.ways) cityRings.push(w);
     drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
       CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
       opts.districtsLandOnly ? fill : null);
@@ -870,6 +977,11 @@
     // rectangle drawn over the map back to coordinates (draw-to-recrop).
     out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW), view: v, mapW, mapH, pad,
       areaKmW: opts.areaKmW, areaKmH: opts.areaKmH };
+    // Clickable district geometry for the colour-pick UI (js/regions.js). Kept off
+    // _meta on purpose: _meta is JSON-persisted with the map (app.js persistMap), and
+    // these rings are far too heavy to store — so region picking is live only after a
+    // render this session, not after a cold reload of the cached PNG.
+    out._regions = regions;
     return out;
   };
 

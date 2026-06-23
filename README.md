@@ -27,6 +27,12 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT
   panel, and the **DISTRICTS: LAND ONLY** toggle clips those finer lines to land so
   boundaries that run out over the sea aren't drawn on the water.
+- **District fills** — click any city / district on the map to open a colour popup
+  and give that district a translucent fill (or clear it back to borders-only). The
+  smallest district under the cursor wins, so clicking inside a city picks the
+  neighbourhood, not the whole city. Each pick is keyed to that OpenStreetMap
+  district, so the colour follows it through pan / zoom / recrop and is saved with
+  the rest of your working area.
 - **Buildings** — once you zoom into a street-scale view (the shorter captured edge
   under 10 km), OpenStreetMap building footprints are drawn as faux-3D **2.5D**
   blocks, extruded by each building's tagged height (or an estimate), shaded walls

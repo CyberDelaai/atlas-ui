@@ -197,6 +197,7 @@
   .stage canvas {
     max-width: 100%; max-height: calc(100vh - 240px); width: auto; height: auto;
     display: block; box-shadow: 0 0 24px rgba(0,0,0,0.6);
+    cursor: pointer; /* districts are clickable to colour them (js/regions.js) */
   }
   /* recrop / zoom controls overlaid on the map (top-right of the stage) */
   .zoom-ctl {
@@ -381,6 +382,12 @@
   .swatch-pick-btn.has-color .pick-icon { display: none; }
   .swatch-pick-btn .pick-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; pointer-events: none; }
   .swatch-pick-btn input[type="color"] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: none; padding: 0; }
+  /* "Clear district fill" chip leading the region popup grid: empty swatch with a
+     diagonal slash (matches the marker editor's "use default" chip idiom). */
+  .swatch.region-clear {
+    position: relative; color: var(--main); background: var(--bg);
+    background-image: linear-gradient(135deg, transparent 44%, #fff 44%, #fff 56%, transparent 56%);
+  }
 
   /* ---------- Land markers (draggable annotation pins over the map) ---------- */
   /* The layer is positioned to cover exactly the map region of the rendered
