@@ -90,6 +90,12 @@
   const tileCache = lru(6);   // stitched {cv,ox,oy} layers — capped low (each is a big canvas)
   const ringCache = lru(32);  // parsed border rings — small arrays, keyed on the request
 
+  // Memoise the flood-detected district faces (js/districts.js). A re-style
+  // (ATLAS.rerender) renders the identical view + line work, so reuse the (heavier)
+  // detection instead of re-running it on every colour change. Keyed on everything
+  // that changes the geometry; a single slot is enough since recolour repeats one view.
+  let districtCacheKey = '', districtCacheVal = [];
+
   // Decoded district background images, keyed on their data-URL src so a re-render
   // (recolour / pan / zoom) reuses the already-decoded bitmap instead of decoding
   // it again. Capped low — each entry is a full image. See drawDistrictImages.
@@ -368,18 +374,15 @@
     return mask;
   }
 
-  // Trace the coast as a low-poly outline in the border colour, so the sea reads
-  // as a bordered shape like the countries. Marching squares over the shared
-  // low-poly grid emits clean faceted segments instead of a jagged pixel edge.
-  function drawCoastline(ctx, lp, col) {
+  // Trace the coast as low-poly 2-point segments (in output px) via marching squares
+  // over the shared low-poly grid — clean faceted edges instead of a jagged pixel
+  // line. Returned as a flat segment list so both the stroked coastline and the
+  // district-detection walls (js/districts.js) are built from the exact same shape.
+  function coastlineSegments(lp) {
     const { grid, gw, gh, step } = lp;
     const at = (gx, gy) => (gx < 0 || gy < 0 || gx >= gw || gy >= gh) ? 0 : grid[gy * gw + gx];
-    ctx.save();
-    ctx.strokeStyle = rgb(col, 0.9);
-    ctx.lineWidth = COAST_LW;
-    ctx.lineJoin = ctx.lineCap = 'round';
-    ctx.beginPath();
-    const seg = (a, b) => { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); };
+    const out = [];
+    const seg = (a, b) => out.push([a, b]);
     for (let gy = 0; gy < gh - 1; gy++) {
       for (let gx = 0; gx < gw - 1; gx++) {
         const cse = (at(gx, gy) << 3) | (at(gx + 1, gy) << 2)
@@ -400,6 +403,18 @@
         }
       }
     }
+    return out;
+  }
+
+  // Stroke the coast outline in the border colour, so the sea reads as a bordered
+  // shape like the countries.
+  function drawCoastline(ctx, lp, col) {
+    ctx.save();
+    ctx.strokeStyle = rgb(col, 0.9);
+    ctx.lineWidth = COAST_LW;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const [a, b] of coastlineSegments(lp)) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
     ctx.stroke();
     ctx.restore();
   }
@@ -619,6 +634,29 @@
       ctx.putImageData(id, 0, 0);
       mctx.drawImage(layer, 0, 0);
     }
+  }
+
+  // Name a detected district face by the OSM admin relation it falls in: the
+  // smallest named relation whose rings contain the point wins (so a face inside a
+  // neighbourhood takes the neighbourhood's name, not the city around it); '' when
+  // none contain it. Lets the API-reported districts label the flood-detected faces
+  // without coupling the fill geometry to them. See js/districts.js.
+  function regionNameAt(regions, lon, lat) {
+    let best = '', bestArea = Infinity;
+    for (const rg of regions || []) {
+      if (!rg.name || !rg.rings || !rg.rings.length) continue;
+      let inside = false, area = 0;
+      for (const ring of rg.rings) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+          if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+            inside = !inside;
+          area += xj * yi - xi * yj;
+        }
+      }
+      if (inside && Math.abs(area) < bestArea) { bestArea = Math.abs(area); best = rg.name; }
+    }
+    return best;
   }
 
   // Paint a translucent fill under the borders for each region the user has
@@ -1053,21 +1091,57 @@
     const regions = opts.cityBorders === false ? [] : await fetchRegions(v, opts.areaKmW);
     tick();
 
+    // The district sub-layer line geometry: each OSM relation's member ways. These
+    // (plus the country borders and the coastline) are the lines we both stroke and
+    // feed to the district detector below.
+    const cityRings = [];
+    for (const rg of regions) for (const w of rg.ways) cityRings.push(w);
+
+    // 4b-i) DETECT the fillable districts. The OSM relations above only DRAW the
+    // border lines and NAME the areas; what the user actually clicks + colours is the
+    // set of closed areas those lines enclose, found by flooding the regions bounded
+    // by all the line work — country/region borders + the OSM district lines + the
+    // coastline + the map frame. So "districts the API reports" and "areas you can
+    // fill" are decoupled: you fill exactly what reads as a bounded region on the map.
+    // The faces come back in the OSM-relation shape ({id,name,level,rings}), so the
+    // fills / click-picking / images downstream are unchanged. Memoised so a recolour
+    // re-render reuses them; skipped (no faces) when the district layer is off, as
+    // before. See js/districts.js.
+    let districts = [];
+    if (opts.cityBorders !== false && ATLAS.computeDistricts) {
+      const dkey = [v.z, Math.round(v.x0), Math.round(v.y0), Math.round(v.x1),
+        Math.round(v.y1), mapW, mapH, rings.length, cityRings.length].join(',');
+      if (dkey === districtCacheKey) {
+        districts = districtCacheVal;
+      } else {
+        const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+        const proj = (lon, lat) => [(lonToX(lon, v.z) - v.x0) * sx, (latToY(lat, v.z) - v.y0) * sy];
+        const polylines = [];
+        for (const ring of rings) polylines.push(simplify(ring.map(([lo, la]) => proj(lo, la)), BORDER_SIMPLIFY));
+        for (const w of cityRings) polylines.push(simplify(w.map(([lo, la]) => proj(lo, la)), CITY_SIMPLIFY));
+        for (const s of coastlineSegments(lp)) polylines.push(s);
+        districts = ATLAS.computeDistricts({
+          polylines, mapW, mapH,
+          toLonLat: (x, y) => { const ll = ATLAS.pxFracToLatLon(v, x / mapW, y / mapH); return [ll.lon, ll.lat]; },
+          labelAt: (lon, lat) => regionNameAt(regions, lon, lat),
+          isWater: (x, y) => fill[(y < 0 ? 0 : y >= mapH ? mapH - 1 : y) * mapW +
+            (x < 0 ? 0 : x >= mapW ? mapW - 1 : x)] === 1,
+        });
+        districtCacheKey = dkey; districtCacheVal = districts;
+      }
+    }
+
     // region fills sit UNDER every border line, so paint them before either border set.
-    // Fills are ALWAYS clipped to land (low-poly water mask): many city districts —
-    // especially maritime ones like HK's Islands District — have coarse admin
-    // boundaries that run far out to sea (straight segments tens of km long), so an
-    // unclipped fill paints big blocky open-water areas. Colouring open sea is never
-    // wanted, so the clip is unconditional here; the districtsLandOnly toggle still
-    // governs the district border *lines* below.
-    drawRegionFills(mctx, regions, v, mapW, mapH, fill);
+    // Fills are ALWAYS clipped to land (low-poly water mask): a detected face can still
+    // hug the coast, and colouring open sea is never wanted, so the clip is
+    // unconditional here; the districtsLandOnly toggle still governs the district
+    // border *lines* below.
+    drawRegionFills(mctx, districts, v, mapW, mapH, fill);
 
     // country / region (admin-1) borders, on top of the fills
     drawBorders(mctx, rings, v, mapW, mapH, COL.line);
 
     // the district sub-layer lines, stroked from each region's member ways
-    const cityRings = [];
-    for (const rg of regions) for (const w of rg.ways) cityRings.push(w);
     drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
       CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
       opts.districtsLandOnly ? fill : null);
@@ -1088,7 +1162,7 @@
     // polygon. Markers are composited later (at export, on a copy), so they stay on
     // top of the image. Like the fills, this only sees districts present in
     // `regions`, so an image shows when its district's geometry is available.
-    const imaged = await drawDistrictImages(mctx, regions, v, mapW, mapH,
+    const imaged = await drawDistrictImages(mctx, districts, v, mapW, mapH,
       opts.districtsLandOnly ? fill : null);
 
     // 4e) the image covers the line work that runs through its district, so re-stroke
@@ -1142,11 +1216,12 @@
     // rectangle drawn over the map back to coordinates (draw-to-recrop).
     out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW), view: v, mapW, mapH, pad,
       areaKmW: opts.areaKmW, areaKmH: opts.areaKmH };
-    // Clickable district geometry for the colour-pick UI (js/regions.js). Kept off
-    // _meta on purpose: _meta is JSON-persisted with the map (app.js persistMap), and
-    // these rings are far too heavy to store — so region picking is live only after a
-    // render this session, not after a cold reload of the cached PNG.
-    out._regions = regions;
+    // Clickable district geometry for the colour-pick UI (js/regions.js): the
+    // flood-detected faces, NOT the raw OSM relations. Kept off _meta on purpose:
+    // _meta is JSON-persisted with the map (app.js persistMap), and these rings are
+    // far too heavy to store — so region picking is live only after a render this
+    // session, not after a cold reload of the cached PNG.
+    out._regions = districts;
     // Per-pixel sea mask (mapW×mapH, 1 = water) so the colour-pick UI can ignore
     // clicks that land on water — districts whose admin area runs out over the sea
     // shouldn't be selectable there. Like _regions, kept off _meta (heavy, and only

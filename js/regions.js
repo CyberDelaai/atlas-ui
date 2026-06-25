@@ -138,7 +138,7 @@
 
   function openPop(rg, clientX, clientY) {
     current = rg;
-    nameEl.textContent = rg.name || (ATLAS.t('region_district') + ' ' + rg.id);
+    nameEl.textContent = rg.name || (ATLAS.t('region_district') + ' ' + (rg.idx || rg.id));
     pop.hidden = false; // unhide first so we can measure it
     syncPop();
     syncImageBtns();

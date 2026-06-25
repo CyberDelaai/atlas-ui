@@ -27,15 +27,17 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT
   panel, and the **DISTRICTS: LAND ONLY** toggle clips those finer lines to land so
   boundaries that run out over the sea aren't drawn on the water.
-- **District fills** — click any city / district on the map to open a colour popup
+- **District fills** — click any enclosed area on the map to open a colour popup
   and give that district a translucent fill (or clear it back to borders-only). The
-  smallest district under the cursor wins, so clicking inside a city picks the
-  neighbourhood, not the whole city. Clicks that land on water aren't pickable, and
-  the fill itself is always trimmed at the coastline — district admin polygons often
-  run far out to sea, so a fill is only ever painted on land (independent of the
-  **DISTRICTS: LAND ONLY** toggle, which governs the border lines). Each pick is
-  keyed to that OpenStreetMap district, so the colour follows it through
-  pan / zoom / recrop and is saved with the rest of your working area.
+  fillable districts are detected from the map itself: every line drawn — country /
+  region borders, the city / district lines, the coastline and the map frame — is
+  treated as a wall, and the closed areas those walls enclose are the districts. So
+  what you fill is exactly what reads as a bounded region, even where the underlying
+  admin polygons overlap, nest or run out to sea (the OpenStreetMap districts still
+  draw the lines and lend each area its name). Clicks that land on water aren't
+  pickable, and the fill itself is always trimmed at the coastline. Each pick is
+  keyed to the area's location, so the colour survives a re-style and re-render and
+  is saved with the rest of your working area.
 - **District images** — the same district popup can attach a **custom background
   picture** to a district: pick an image, then drag to move and scroll to zoom it
   into place inside a live window cut to the district's exact shape, and hit **DONE**.
@@ -44,8 +46,8 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   city-district border lines are re-stroked on top of it so those edges stay crisp.
   With **DISTRICTS: LAND ONLY** on (the default) the picture is also trimmed at the
   coastline, since district admin polygons often run out to sea. Like the
-  colour fills it's keyed to that
-  OpenStreetMap district, so it stays anchored through pan / zoom / recrop and is
+  colour fills it's keyed to the detected district's location, so it stays anchored
+  through a re-style / re-render and is
   saved with your working area (storage is best-effort — very large images may not
   survive a reload). Re-open the popup to **EDIT** or **REMOVE** it.
 - **Buildings** — once you zoom into a street-scale view (the shorter captured edge
