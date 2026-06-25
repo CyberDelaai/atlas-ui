@@ -39,6 +39,14 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   pickable, and the fill itself is always trimmed at the coastline. Each pick is
   keyed to the area's location, so the colour survives a re-style and re-render and
   is saved with the rest of your working area.
+- **Grouping districts** — **Ctrl+click** (or Cmd-click) several districts to select
+  them together, then apply a fill or background from the right-click popup: doing so
+  **fuses them into one region** — they share that colour, the borders *between* them
+  disappear, and a single background image spans the whole group (fitted to the merged
+  outline rather than repeated per district). The popup's **UNGROUP** button dissolves
+  the group back into individual districts (the per-district fills stay, the shared
+  image is cleared). Groups are keyed to the districts' locations like the fills, so
+  they survive a re-style / re-render and are saved with your working area.
 - **District images** — the same district popup can attach a **custom background
   picture** to a district: pick an image, then drag to move and scroll to zoom it
   into place inside a live window cut to the district's exact shape, and hit **DONE**.

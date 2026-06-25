@@ -401,6 +401,9 @@
   /* Per-district background-image buttons, sitting under the region popup grid. */
   .region-image-row { display: flex; gap: 8px; margin-top: 12px; }
   .region-image-btn { flex: 1; }
+  /* UNGROUP row: shown only when the popup targets a grouped district. */
+  .region-group-row { display: flex; margin-top: 8px; }
+  .region-ungroup-btn { flex: 1; }
 
   /* ---------- District background-image placement editor ---------- */
   /* Covers the map region (positioned like .marker-layer) while the user pans /

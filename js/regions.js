@@ -32,6 +32,40 @@
     ATLAS.save('atlas:regionColors', JSON.stringify(S.regionColors));
   }
 
+  // ---- restore persisted groups (data only) ----------------------------------
+  // A group fuses several detected faces into one region: shared fill (written
+  // per-member into regionColors), one background image (under districtImages[id]),
+  // and the borders between members masked out (buildGroupEraseMask in map.js).
+  if (!S.regionGroups || !Array.isArray(S.regionGroups)) S.regionGroups = [];
+  try {
+    const raw = localStorage.getItem('atlas:regionGroups');
+    const g = raw && JSON.parse(raw);
+    if (Array.isArray(g)) S.regionGroups = g.filter((x) => x && Array.isArray(x.members));
+  } catch (e) { /* storage blocked / corrupt — keep defaults */ }
+  function persistGroups() {
+    ATLAS.save('atlas:regionGroups', JSON.stringify(S.regionGroups));
+  }
+  // The group a face belongs to, or null. Ids are the stable centroid face ids.
+  function groupOf(faceId) {
+    return (S.regionGroups || []).find((g) => g.members.indexOf(faceId) !== -1) || null;
+  }
+  // Fuse the given face ids into one group (≥2 members). Any pre-existing group
+  // that overlaps the set is dissolved first, so a face lives in at most one group.
+  function createGroup(ids) {
+    const members = Array.from(new Set(ids));
+    if (members.length < 2) return null;
+    S.regionGroups = (S.regionGroups || []).filter(
+      (g) => !g.members.some((m) => members.indexOf(m) !== -1));
+    const g = { id: 'g:' + members.slice().sort().join(';'), members };
+    S.regionGroups.push(g);
+    persistGroups();
+    return g;
+  }
+  function removeGroup(groupId) {
+    S.regionGroups = (S.regionGroups || []).filter((g) => g.id !== groupId);
+    persistGroups();
+  }
+
   // Debounced restyle, mirroring js/colors.js: the custom picker fires 'input'
   // rapidly while dragging, so coalesce the (heavier) re-render.
   let reTimer = 0;
@@ -121,11 +155,13 @@
   }
 
   // ---- selection highlight ---------------------------------------------------
-  // The currently SELECTED district (by stable centroid id), painted as a striped
+  // The currently SELECTED districts (by stable centroid id), painted as a striped
   // cyan tint on the #regionSelLayer overlay canvas. Selection is in-memory only
   // (transient UI), keyed by id so it survives a recolour re-render — drawSelection
-  // re-resolves the region from the live canvas's _regions each paint.
-  let selLayer = null, selectedId = null, selRaf = 0, stripeTile = null;
+  // re-resolves each region from the live canvas's _regions each paint. Multiple
+  // faces can be selected at once (Ctrl+click); applying a fill/image to >1 fuses
+  // them into a group.
+  let selLayer = null, selectedIds = new Set(), selRaf = 0, stripeTile = null;
 
   // A small repeating tile of diagonal cyan stripes over a translucent black base.
   // Built once and reused; createPattern is rebound to the live ctx each paint.
@@ -155,9 +191,10 @@
   function drawSelection() {
     if (!selLayer) return;
     const cv = liveMap();
-    if (!cv || !selectedId) { selLayer.hidden = true; return; }
-    const rg = (cv._regions || []).find((r) => r.id === selectedId);
-    if (!rg || !rg.rings || !rg.rings.length) { selLayer.hidden = true; return; }
+    if (!cv || !selectedIds.size) { selLayer.hidden = true; return; }
+    const regs = (cv._regions || []).filter(
+      (r) => selectedIds.has(r.id) && r.rings && r.rings.length);
+    if (!regs.length) { selLayer.hidden = true; return; }
 
     const M = cv._meta;
     const sr = $('stage').getBoundingClientRect();
@@ -175,48 +212,87 @@
     const ctx = selLayer.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    const stripe = stripePattern(ctx);
 
-    ctx.beginPath();
-    for (const ring of rg.rings) {
-      if (ring.length < 3) continue;
-      for (let i = 0; i < ring.length; i++) {
-        const f = ATLAS.latLonToPxFrac(M.view, ring[i][1], ring[i][0]); // ring = [lon,lat]
-        const x = f.fx * W, y = f.fy * H;
-        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    // Paint each selected face's polygon independently — own clip + outline — so
+    // members of a group each read as selected without their shared edge vanishing.
+    for (const rg of regs) {
+      ctx.beginPath();
+      for (const ring of rg.rings) {
+        if (ring.length < 3) continue;
+        for (let i = 0; i < ring.length; i++) {
+          const f = ATLAS.latLonToPxFrac(M.view, ring[i][1], ring[i][0]); // ring = [lon,lat]
+          const x = f.fx * W, y = f.fy * H;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
       }
-      ctx.closePath();
+      ctx.save();
+      ctx.clip('evenodd');          // inner holes (nested districts) punch through
+      ctx.fillStyle = stripe;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+      ctx.lineWidth = 1.5;          // crisp cyan edge on top of the tint
+      ctx.strokeStyle = 'rgba(0,240,255,0.85)';
+      ctx.stroke();
     }
-    ctx.save();
-    ctx.clip('evenodd');          // inner holes (nested districts) punch through
-    ctx.fillStyle = stripePattern(ctx);
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
-    ctx.lineWidth = 1.5;          // crisp cyan edge on top of the tint
-    ctx.strokeStyle = 'rgba(0,240,255,0.85)';
-    ctx.stroke();
   }
 
-  function selectRegion(rg) { selectedId = rg.id; drawSelection(); }
+  // Selection mutators — all redraw the overlay.
+  function setSelection(ids) { selectedIds = new Set(ids); drawSelection(); }
   function clearSelection() {
-    if (selectedId == null) return;
-    selectedId = null;
+    if (!selectedIds.size) return;
+    selectedIds.clear();
     drawSelection();
   }
+  // Faces that move together when (de)selecting `rg`: its whole group, or just it.
+  function unitOf(rg) { const g = groupOf(rg.id); return g ? g.members.slice() : [rg.id]; }
 
   // ---- colour popup ----------------------------------------------------------
-  let pop, grid, pick, custom, nameEl, imgBtn, imgRemoveBtn;
-  let current = null; // region currently being edited
+  let pop, grid, pick, custom, nameEl, imgBtn, imgRemoveBtn, ungroupBtn;
+  let current = null; // the right-clicked region (names the popup + identifies a single target)
 
-  // Reflect the open district's image state on the SET/EDIT + REMOVE buttons.
+  // The faces this popup acts on: the whole live selection, else just `current`.
+  function targetIds() {
+    if (selectedIds.size) return Array.from(selectedIds);
+    return current ? [current.id] : [];
+  }
+  // Auto-group: when the popup acts on >1 face, fuse them so they share fill/image
+  // and lose their internal borders. Returns the group acting (existing or new), or
+  // the single face's group (which may be null). Re-selects the group's members.
+  function ensureGroupForApply() {
+    const ids = targetIds();
+    if (ids.length <= 1) return current ? groupOf(current.id) : null;
+    let g = groupOf(ids[0]);
+    const same = g && g.members.length === ids.length &&
+      ids.every((id) => g.members.indexOf(id) !== -1);
+    if (!same) g = createGroup(ids);
+    if (g) selectedIds = new Set(g.members);
+    return g;
+  }
+  // Where a (group's or single face's) shared image is keyed.
+  function imageTargetId() {
+    const g = current && groupOf(current.id);
+    return g ? g.id : (current ? current.id : null);
+  }
+
+  // Reflect the open target's image state on the SET/EDIT + REMOVE buttons.
   function syncImageBtns() {
     if (!imgBtn) return;
     const di = ATLAS.districtImages;
-    const has = !!(current && di && di.has(current.id));
+    const id = imageTargetId();
+    const has = !!(id && di && di.has(id));
     imgBtn.textContent = ATLAS.t(has ? 'b_edit_image' : 'b_set_image');
     if (imgRemoveBtn) imgRemoveBtn.hidden = !has;
   }
+  // Show UNGROUP only when the popup targets a grouped district.
+  function syncGroupBtn() {
+    if (!ungroupBtn) return;
+    ungroupBtn.hidden = !(current && groupOf(current.id));
+  }
 
   function syncPop() {
+    // Members share a colour, so the right-clicked face's colour is representative.
     const cur = ((current && S.regionColors[current.id]) || '').toLowerCase();
     let matched = false;
     grid.querySelectorAll('.swatch').forEach((sw) => {
@@ -236,10 +312,13 @@
 
   function openPop(rg, clientX, clientY) {
     current = rg;
-    nameEl.textContent = rg.name || (ATLAS.t('region_district') + ' ' + (rg.idx || rg.id));
+    const n = selectedIds.size;
+    const base = rg.name || (ATLAS.t('region_district') + ' ' + (rg.idx || rg.id));
+    nameEl.textContent = (groupOf(rg.id) || n > 1) ? base + ' (' + Math.max(n, 1) + ')' : base;
     pop.hidden = false; // unhide first so we can measure it
     syncPop();
     syncImageBtns();
+    syncGroupBtn();
     const pw = pop.offsetWidth, ph = pop.offsetHeight, m = 12;
     let left = clientX + m;
     if (left + pw > window.innerWidth - 8) left = clientX - pw - m;
@@ -249,15 +328,20 @@
   function closePop() { if (pop) { pop.hidden = true; current = null; } }
 
   function choose(hex) {
-    if (!current) return;
-    S.regionColors[current.id] = hex;
+    const ids = targetIds();
+    if (!ids.length) return;
+    ensureGroupForApply();              // applying to >1 face fuses them
+    ids.forEach((id) => { S.regionColors[id] = hex; });
     persist();
     syncPop();
+    syncGroupBtn();
+    drawSelection();
     scheduleRerender();
   }
   function clearColor() {
-    if (!current) return;
-    delete S.regionColors[current.id];
+    const ids = targetIds();
+    if (!ids.length) return;
+    ids.forEach((id) => { delete S.regionColors[id]; });
     persist();
     syncPop();
     scheduleRerender();
@@ -274,6 +358,7 @@
     nameEl = $('regionPopName');
     imgBtn = $('regionPopImage');
     imgRemoveBtn = $('regionPopImageRemove');
+    ungroupBtn = $('regionPopUngroup');
     selLayer = $('regionSelLayer');
 
     // Build the preset swatch grid ahead of the pick chip, just like js/colors.js,
@@ -297,7 +382,9 @@
     }
 
     // LEFT-click on the map → SELECT the district under the cursor (striped tint);
-    // clicking sea / empty space deselects. The menu is right-click only now, so a
+    // a grouped district selects its whole group. Ctrl/Cmd+click ADDS/REMOVES a
+    // district (or group) from a multi-selection without clearing the rest. Plain
+    // click on sea / empty space deselects. The menu is right-click only now, so a
     // left click always dismisses any open popup. A small drag-guard (recorded on
     // pointerdown) ignores the click that ends a marker drag or a recrop rubber-band.
     let downX = 0, downY = 0;
@@ -307,21 +394,38 @@
       if (Math.abs(e.clientX - downX) > 6 || Math.abs(e.clientY - downY) > 6) return; // was a drag
       closePop();
       const rg = regionAt(e.clientX, e.clientY);
-      // toggle: clicking the already-selected district (or sea / empty) deselects.
-      if (rg && rg.id !== selectedId) selectRegion(rg); else clearSelection();
+      const additive = e.ctrlKey || e.metaKey;
+      if (!rg) { if (!additive) clearSelection(); return; } // empty/sea: plain click clears
+      const ids = unitOf(rg);
+      if (additive) {
+        // toggle this face/group in the running selection
+        const all = ids.every((id) => selectedIds.has(id));
+        ids.forEach((id) => all ? selectedIds.delete(id) : selectedIds.add(id));
+        drawSelection();
+      } else {
+        // plain click: select just this unit; clicking the sole current selection clears
+        const sole = selectedIds.size === ids.length && ids.every((id) => selectedIds.has(id));
+        if (sole) clearSelection(); else setSelection(ids);
+      }
     });
 
-    // RIGHT-click on a district → select it (if not already) and open its menu at
-    // the cursor. Suppress the browser context menu anywhere over the map so the
-    // right-click reads as ours; off a district it just dismisses the popup.
+    // RIGHT-click on a district → open its menu at the cursor. If the district isn't
+    // already in the selection, it becomes the selection (its whole group if grouped);
+    // otherwise the existing multi-selection is kept so the menu acts on all of it.
+    // Suppress the browser context menu anywhere over the map so the right-click reads
+    // as ours; off a district it just dismisses the popup.
     stage.addEventListener('contextmenu', (e) => {
       if (blocked(e)) return;
       const cv = liveMap();
       if (!cv) return; // no live map → leave the native menu alone
       e.preventDefault();
       const rg = regionAt(e.clientX, e.clientY);
-      if (rg) { selectRegion(rg); openPop(rg, e.clientX, e.clientY); }
-      else closePop();
+      if (!rg) { closePop(); return; }
+      const ids = unitOf(rg);
+      const inSel = ids.some((id) => selectedIds.has(id));
+      if (!inSel) setSelection(ids);
+      else if (groupOf(rg.id)) setSelection(ids); // ensure the full group is lit
+      openPop(rg, e.clientX, e.clientY);
     });
 
     // Preset swatch / clear chip → commit + close. (The pick chip isn't a .swatch;
@@ -335,16 +439,44 @@
     // Native picker: live preview while dragging.
     custom.addEventListener('input', () => choose(custom.value));
 
-    // Image controls: set/edit opens the placement editor (js/district-images.js);
-    // remove clears the district's image. Both close the popup.
+    // Image controls: set/edit opens the placement editor (js/district-images.js).
+    // For a multi-selection this auto-groups first and edits ONE image spanning the
+    // group's union (a synthetic region whose rings are all members' rings); for a
+    // single district it edits that district. Remove clears the shared image.
     if (imgBtn) imgBtn.addEventListener('click', () => {
-      const rg = current;
+      const ids = targetIds();
+      const g = ids.length > 1 ? ensureGroupForApply() : (current && groupOf(current.id));
+      const single = current;
       closePop();
-      if (rg && ATLAS.districtImages) ATLAS.districtImages.begin(rg);
+      if (!ATLAS.districtImages) return;
+      if (g) {
+        const cv = liveMap();
+        const faces = ((cv && cv._regions) || []).filter((r) => g.members.indexOf(r.id) !== -1);
+        const rings = faces.reduce((acc, f) => acc.concat(f.rings), []);
+        if (rings.length) ATLAS.districtImages.begin({ id: g.id, name: '', rings });
+      } else if (single) {
+        ATLAS.districtImages.begin(single);
+      }
     });
     if (imgRemoveBtn) imgRemoveBtn.addEventListener('click', () => {
-      if (current && ATLAS.districtImages) ATLAS.districtImages.remove(current.id);
+      const id = imageTargetId();
+      if (id && ATLAS.districtImages) ATLAS.districtImages.remove(id);
       closePop();
+    });
+
+    // UNGROUP: dissolve the group back into individual districts — drop its shared
+    // image (the per-member fills stay, so each district keeps its colour) and
+    // re-render so the internal borders come back.
+    if (ungroupBtn) ungroupBtn.addEventListener('click', () => {
+      const g = current && groupOf(current.id);
+      closePop();
+      if (!g) return;
+      removeGroup(g.id);
+      if (ATLAS.districtImages && ATLAS.districtImages.has(g.id)) {
+        ATLAS.districtImages.remove(g.id);   // deletes + persists + re-renders
+      } else if (ATLAS.rerender) {
+        ATLAS.rerender();
+      }
     });
 
     // Dismiss on outside click or Escape. A click inside the stage is left for the

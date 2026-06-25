@@ -1,4 +1,4 @@
-<!-- ATLAS v0.4.5 -->
+<!-- ATLAS v0.4.6 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,7 +100,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.5</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.6</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -288,6 +288,11 @@
   <div class="region-image-row">
     <button class="btn btn-sm region-image-btn" id="regionPopImage" type="button" data-augmented-ui="tl-clip br-clip border" data-i18n="b_set_image">SET IMAGE</button>
     <button class="btn btn-sm region-image-remove" id="regionPopImageRemove" type="button" hidden data-augmented-ui="tl-clip br-clip border" data-i18n="b_remove_image">REMOVE</button>
+  </div>
+  <!-- Shown only for a grouped district: dissolve the group back into individual
+       districts (clears the shared image; per-member fills stay). js/regions.js. -->
+  <div class="region-group-row">
+    <button class="btn btn-sm region-ungroup-btn" id="regionPopUngroup" type="button" hidden data-augmented-ui="tl-clip br-clip border" data-i18n="b_ungroup">UNGROUP</button>
   </div>
 </div>
 

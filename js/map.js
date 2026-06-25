@@ -603,10 +603,14 @@
   // composited back — so e.g. the city sub-layer can be kept on land only. The
   // mask matches the low-poly coastline exactly, so the cut lands right at the
   // shore.
-  function drawBorders(mctx, rings, v, mapW, mapH, col, lw, alpha, eps, waterMask) {
+  function drawBorders(mctx, rings, v, mapW, mapH, col, lw, alpha, eps, waterMask, eraseMask) {
     const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+    // A water mask (clip to land) and/or a group erase mask (hide a group's internal
+    // borders) both need the lines stroked to an offscreen layer, knocked out, then
+    // composited — so build the layer whenever either is present.
+    const knockout = waterMask || eraseMask;
     let layer = null, ctx = mctx;
-    if (waterMask) {
+    if (knockout) {
       layer = document.createElement('canvas');
       layer.width = mapW; layer.height = mapH;
       ctx = layer.getContext('2d');
@@ -627,10 +631,13 @@
     }
     ctx.stroke();
     ctx.restore();
-    if (waterMask) {
-      // erase line pixels that fall on water, then stamp the land-only lines down
+    if (knockout) {
+      // erase line pixels on water (land-only layers) and inside a group's interior
+      // (so members read as one region), then stamp the remaining lines down.
       const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
-      for (let p = 0; p < waterMask.length; p++) if (waterMask[p]) d[p * 4 + 3] = 0;
+      for (let p = 0; p < mapW * mapH; p++) {
+        if ((waterMask && waterMask[p]) || (eraseMask && eraseMask[p])) d[p * 4 + 3] = 0;
+      }
       ctx.putImageData(id, 0, 0);
       mctx.drawImage(layer, 0, 0);
     }
@@ -657,6 +664,53 @@
       if (inside && Math.abs(area) < bestArea) { bestArea = Math.abs(area); best = rg.name; }
     }
     return best;
+  }
+
+  // Build a per-pixel mask (mapW×mapH, 1 = erase) marking the INTERIOR of each
+  // district group, used to knock the borders BETWEEN a group's members out of the
+  // stroked line layers so the group reads as one region. Each member face is filled
+  // solid (the faces abut at the wall centre, so the union is gap-free); the mask is
+  // then eroded 1px so the group's OUTER boundary line — centred on that edge — is
+  // preserved while the fully-interior shared walls stay marked. Returns null when
+  // there are no live groups. `groups` carry their resolved member faces (.faces).
+  function buildGroupEraseMask(groups, v, mapW, mapH) {
+    if (!groups || !groups.length) return null;
+    const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+    const cv = document.createElement('canvas');
+    cv.width = mapW; cv.height = mapH;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    for (const g of groups) {
+      for (const f of g.faces) {
+        ctx.beginPath();
+        for (const ring of f.rings) {
+          if (ring.length < 3) continue;
+          for (let i = 0; i < ring.length; i++) {
+            const x = (lonToX(ring[i][0], v.z) - v.x0) * sx;
+            const y = (latToY(ring[i][1], v.z) - v.y0) * sy;
+            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+          }
+          ctx.closePath();
+        }
+        ctx.fill('evenodd');
+      }
+    }
+    const data = ctx.getImageData(0, 0, mapW, mapH).data;
+    const N = mapW * mapH;
+    const raw = new Uint8Array(N);
+    for (let p = 0; p < N; p++) if (data[p * 4 + 3] > 8) raw[p] = 1;
+    // erode 1px (4-neighbour): drop any marked pixel touching an unmarked one, so the
+    // outer-boundary line band is left untouched while interior walls stay erased.
+    const mask = new Uint8Array(N);
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        const p = y * mapW + x;
+        if (!raw[p]) continue;
+        if (x === 0 || y === 0 || x === mapW - 1 || y === mapH - 1) { mask[p] = 1; continue; }
+        if (raw[p - 1] && raw[p + 1] && raw[p - mapW] && raw[p + mapW]) mask[p] = 1;
+      }
+    }
+    return mask;
   }
 
   // Paint a translucent fill under the borders for each region the user has
@@ -1131,20 +1185,42 @@
       }
     }
 
+    // 4b-ii) resolve district GROUPS against the freshly detected faces. A group
+    // fuses several faces into one region (ATLAS.state.regionGroups, keyed on the
+    // same centroid ids as regionColors). We look its members up in `districts`;
+    // absent ones (the view drifted) just drop out, so a group degrades gracefully.
+    // groupRegions are synthetic union regions ({id, rings = all members' rings})
+    // used to paint ONE shared background image across the group; groupErase masks
+    // the borders between members out of the line layers below.
+    const groups = ((ATLAS.state && ATLAS.state.regionGroups) || []).map((g) => ({
+      id: g.id, members: g.members,
+      faces: g.members.map((id) => districts.find((d) => d.id === id)).filter(Boolean),
+    })).filter((g) => g.faces.length);
+    const groupedIds = new Set();
+    for (const g of groups) for (const m of g.members) groupedIds.add(m);
+    const groupRegions = groups.map((g) => ({
+      id: g.id, name: '', level: 0,
+      rings: g.faces.reduce((acc, f) => acc.concat(f.rings), []),
+    }));
+    const groupErase = buildGroupEraseMask(groups, v, mapW, mapH);
+
     // region fills sit UNDER every border line, so paint them before either border set.
     // Fills are ALWAYS clipped to land (low-poly water mask): a detected face can still
     // hug the coast, and colouring open sea is never wanted, so the clip is
     // unconditional here; the districtsLandOnly toggle still governs the district
-    // border *lines* below.
+    // border *lines* below. Grouped members each carry the group's colour (written
+    // per-member into regionColors), so this is unchanged — groupErase hides the seams.
     drawRegionFills(mctx, districts, v, mapW, mapH, fill);
 
-    // country / region (admin-1) borders, on top of the fills
-    drawBorders(mctx, rings, v, mapW, mapH, COL.line);
+    // country / region (admin-1) borders, on top of the fills. groupErase knocks out
+    // any segment interior to a group so members read as one region.
+    drawBorders(mctx, rings, v, mapW, mapH, COL.line,
+      undefined, undefined, undefined, null, groupErase);
 
     // the district sub-layer lines, stroked from each region's member ways
     drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
       CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
-      opts.districtsLandOnly ? fill : null);
+      opts.districtsLandOnly ? fill : null, groupErase);
 
     // 4c) buildings: OSM footprints extruded into 2.5D blocks, drawn on top of the
     // terrain + borders. Gated to street-scale views — only when the shorter captured
@@ -1160,25 +1236,29 @@
     // 4d) per-district background images: drawn last of the map layers, on top of
     // terrain / water / fills / borders / buildings, clipped to each district's
     // polygon. Markers are composited later (at export, on a copy), so they stay on
-    // top of the image. Like the fills, this only sees districts present in
-    // `regions`, so an image shows when its district's geometry is available.
-    const imaged = await drawDistrictImages(mctx, districts, v, mapW, mapH,
+    // top of the image. Grouped members are swapped for their synthetic union region
+    // so ONE image spans the whole group (cover-fitted to the union bbox, clipped to
+    // the combined outline) instead of each member drawing the picture.
+    const imageRegions = districts.filter((d) => !groupedIds.has(d.id)).concat(groupRegions);
+    const imaged = await drawDistrictImages(mctx, imageRegions, v, mapW, mapH,
       opts.districtsLandOnly ? fill : null);
 
     // 4e) the image covers the line work that runs through its district, so re-stroke
     // it on top of the image — the coastline (land/water border), the country/region
     // borders and the city sub-layer — each clipped to the imaged district so nothing
-    // outside it is double-drawn.
+    // outside it is double-drawn. groupErase keeps a group's internal borders hidden
+    // here too (the re-stroke would otherwise bring them back over the shared image).
     if (imaged.length) {
       const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
       for (const rg of imaged) {
         mctx.save();
         clipToRings(mctx, rg.rings, v, sx, sy);
         drawCoastline(mctx, lp, COL.line);
-        drawBorders(mctx, rings, v, mapW, mapH, COL.line);
+        drawBorders(mctx, rings, v, mapW, mapH, COL.line,
+          undefined, undefined, undefined, null, groupErase);
         drawBorders(mctx, cityRings, v, mapW, mapH, COL.line,
           CITY_BORDER_LW, CITY_BORDER_ALPHA, CITY_SIMPLIFY,
-          opts.districtsLandOnly ? fill : null);
+          opts.districtsLandOnly ? fill : null, groupErase);
         mctx.restore();
       }
     }
