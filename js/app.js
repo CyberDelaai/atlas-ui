@@ -423,8 +423,9 @@
   function mountCanvas(canvas) {
     const stage = $('stage');
     stage.querySelector('.placeholder')?.remove();
-    const prev = stage.querySelector('canvas');
-    if (prev) prev.remove();
+    // remove only the prior MAP canvas — the stage also holds the region-selection
+    // overlay canvas (#regionSelLayer), which must survive a re-render.
+    stage.querySelector('#mapCanvas')?.remove();
     canvas.id = 'mapCanvas';
     canvas.removeAttribute('style');
     stage.appendChild(canvas);
@@ -432,6 +433,7 @@
     setCropMode(false);          // a fresh map cancels any in-progress draw
     updateZoomBtns();
     if (ATLAS.markers) ATLAS.markers.reposition(); // re-anchor the marker overlay
+    if (ATLAS.regions) ATLAS.regions.refresh();    // repaint the selection highlight
   }
 
   // Rebuild the last rendered map from a persisted PNG data URL so a reload

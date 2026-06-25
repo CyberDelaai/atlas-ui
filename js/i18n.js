@@ -13,7 +13,7 @@
       panel_colors: 'COLORS', l_colors: 'MAP COLORS', c_land: 'LAND', c_landshade: 'LAND SHADE', c_water: 'WATER', c_border: 'BORDERS',
       c_frame: 'FRAME', c_region: 'REGION', c_building: 'BUILDINGS', c_marker: 'MARKER', t_pick: 'Pick any color',
       t_region_clear: 'Clear district color', region_district: 'DISTRICT',
-      hint_districts: 'Click a district on the map to give it a colored fill.',
+      hint_districts: 'Left-click a district to select it; right-click for its color / image menu.',
       l_districts: 'CITY DISTRICTS', l_districts_land: 'DISTRICTS: LAND ONLY', l_buildings: 'BUILDINGS', lab_off: 'OFF', lab_on: 'ON',
       t_zoom_in: 'Zoom in — recrop tighter', t_zoom_out: 'Zoom out — recrop wider',
       t_crop: 'Draw a region to recrop',

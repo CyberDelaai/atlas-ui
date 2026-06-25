@@ -27,8 +27,9 @@ No build step, no backend — just open `index.html`. Everything runs client-sid
   sub-layer can be switched off with the **CITY DISTRICTS** toggle in the OUTPUT
   panel, and the **DISTRICTS: LAND ONLY** toggle clips those finer lines to land so
   boundaries that run out over the sea aren't drawn on the water.
-- **District fills** — click any enclosed area on the map to open a colour popup
-  and give that district a translucent fill (or clear it back to borders-only). The
+- **District fills** — left-click any enclosed area on the map to select it (a
+  striped cyan highlight marks the selection); right-click then opens a popup menu
+  to give that district a translucent fill (or clear it back to borders-only). The
   fillable districts are detected from the map itself: every line drawn — country /
   region borders, the city / district lines, the coastline and the map frame — is
   treated as a wall, and the closed areas those walls enclose are the districts. So

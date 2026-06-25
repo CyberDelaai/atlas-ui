@@ -247,6 +247,16 @@
   }
   .crop-sel[hidden] { display: none; }
 
+  /* selected-district highlight overlay: a canvas covering the map region (like
+     .marker-layer), painted with a striped cyan tint for the clicked district.
+     Scoped past the `.stage canvas` map rule so it doesn't pick up the map
+     canvas's box-shadow / size caps / pointer cursor. */
+  .stage canvas.region-sel-layer {
+    position: absolute; z-index: 1; pointer-events: none;
+    max-width: none; max-height: none; box-shadow: none; cursor: default;
+  }
+  .stage canvas.region-sel-layer[hidden] { display: none; }
+
   .stage.rendering { border-color: var(--main); }
   .stage.rendering::after {
     content: ''; position: absolute; inset: 0;

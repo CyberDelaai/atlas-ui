@@ -1,4 +1,4 @@
-<!-- ATLAS v0.4.4 -->
+<!-- ATLAS v0.4.5 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,7 +100,7 @@
         <a class="app-menu-item current" href="https://cyberdeck.tools/atlas-ui/" aria-current="page">&gt; ATLAS_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.4</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.5</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
@@ -187,6 +187,10 @@
         </div>
         <!-- rubber-band rectangle shown while drawing a recrop region -->
         <div class="crop-sel" id="cropSel" hidden></div>
+        <!-- selected-district highlight: a striped cyan tint painted over the map
+             region for the district the user LMB-clicks (RMB then opens its menu).
+             Transient UI — not baked into the exported PNG. See js/regions.js. -->
+        <canvas class="region-sel-layer" id="regionSelLayer" hidden></canvas>
         <!-- draggable land-marker overlay: positioned to cover exactly the map
              region of the rendered canvas; markers are placed inside it by
              fractional coords. See js/markers.js. -->
@@ -218,7 +222,7 @@
           <span class="lab r" data-i18n="lab_on">ON</span>
         </button>
       </div>
-      <p class="hint" data-i18n="hint_districts">Click a district on the map to give it a colored fill.</p>
+      <p class="hint" data-i18n="hint_districts">Left-click a district to select it; right-click for its color / image menu.</p>
 
       <!-- Sub-option of the above: when ON, district lines are clipped to land so
            boundaries running out over the sea aren't drawn on the water. -->

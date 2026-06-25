@@ -1,6 +1,9 @@
-// ATLAS — clickable city-district regions. Click a district on the rendered map
-// to open a small colour popup (the shared preset grid + custom OS picker) and
-// give that district a translucent fill; clear it to go back to borders-only.
+// ATLAS — clickable city-district regions. Left-click a district on the rendered
+// map to SELECT it — a striped cyan tint is painted over it (a transient overlay
+// canvas, #regionSelLayer, not baked into the export). Right-click a district then
+// opens its small popup menu (the shared preset colour grid + custom OS picker +
+// image controls) to give that district a translucent fill or background image;
+// clear it to go back to borders-only.
 //
 // The clickable geometry is the OSM admin-relation layer the renderer fetches each
 // render (stashed on the live canvas as `_regions`; see fetchRegions / renderMap in
@@ -105,6 +108,101 @@
     return mask[y * m.mapW + x] === 1;
   }
 
+  // The district under a client point, or null (outside the map / over sea / no
+  // enclosing district). Shared by the left-click select + right-click menu.
+  function regionAt(clientX, clientY) {
+    const cv = liveMap();
+    if (!cv) return null;
+    const fr = clientToMapFrac(cv, clientX, clientY);
+    if (!fr) return null;
+    if (isWaterAt(cv, fr.fx, fr.fy)) return null;
+    const ll = ATLAS.pxFracToLatLon(cv._meta.view, fr.fx, fr.fy);
+    return pickRegion(cv._regions, ll.lon, ll.lat);
+  }
+
+  // ---- selection highlight ---------------------------------------------------
+  // The currently SELECTED district (by stable centroid id), painted as a striped
+  // cyan tint on the #regionSelLayer overlay canvas. Selection is in-memory only
+  // (transient UI), keyed by id so it survives a recolour re-render — drawSelection
+  // re-resolves the region from the live canvas's _regions each paint.
+  let selLayer = null, selectedId = null, selRaf = 0, stripeTile = null;
+
+  // A small repeating tile of diagonal cyan stripes over a translucent black base.
+  // Built once and reused; createPattern is rebound to the live ctx each paint.
+  function stripePattern(ctx) {
+    if (!stripeTile) {
+      const T = 12;
+      const t = document.createElement('canvas');
+      t.width = t.height = T;
+      const c = t.getContext('2d');
+      c.fillStyle = 'rgba(2,16,22,0.5)';        // black-ish base
+      c.fillRect(0, 0, T, T);
+      c.strokeStyle = 'rgba(0,240,255,0.5)';    // signature-cyan stripes
+      c.lineWidth = 4;
+      c.lineCap = 'square';
+      for (let o = -T; o <= T; o += T) {        // anti-diagonals, tiling seamlessly
+        c.beginPath(); c.moveTo(o, T); c.lineTo(o + T, 0); c.stroke();
+      }
+      stripeTile = t;
+    }
+    return ctx.createPattern(stripeTile, 'repeat');
+  }
+
+  // Size + place the overlay over the map region of the displayed canvas (mirrors
+  // markers' reposition), then fill the selected district's polygon with the
+  // stripe pattern and outline it in cyan. Hides when nothing's selected or the
+  // map carries no live geometry (cold reload restores the PNG without _regions).
+  function drawSelection() {
+    if (!selLayer) return;
+    const cv = liveMap();
+    if (!cv || !selectedId) { selLayer.hidden = true; return; }
+    const rg = (cv._regions || []).find((r) => r.id === selectedId);
+    if (!rg || !rg.rings || !rg.rings.length) { selLayer.hidden = true; return; }
+
+    const M = cv._meta;
+    const sr = $('stage').getBoundingClientRect();
+    const cr = cv.getBoundingClientRect();
+    const scale = cr.width / cv.width; // uniform (CSS preserves aspect)
+    const W = M.mapW * scale, H = M.mapH * scale;
+    selLayer.hidden = false;
+    selLayer.style.left = (cr.left - sr.left + M.pad * scale) + 'px';
+    selLayer.style.top = (cr.top - sr.top + M.pad * scale) + 'px';
+    selLayer.style.width = W + 'px';
+    selLayer.style.height = H + 'px';
+    const dpr = window.devicePixelRatio || 1;
+    selLayer.width = Math.max(1, Math.round(W * dpr));
+    selLayer.height = Math.max(1, Math.round(H * dpr));
+    const ctx = selLayer.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.beginPath();
+    for (const ring of rg.rings) {
+      if (ring.length < 3) continue;
+      for (let i = 0; i < ring.length; i++) {
+        const f = ATLAS.latLonToPxFrac(M.view, ring[i][1], ring[i][0]); // ring = [lon,lat]
+        const x = f.fx * W, y = f.fy * H;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+    }
+    ctx.save();
+    ctx.clip('evenodd');          // inner holes (nested districts) punch through
+    ctx.fillStyle = stripePattern(ctx);
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    ctx.lineWidth = 1.5;          // crisp cyan edge on top of the tint
+    ctx.strokeStyle = 'rgba(0,240,255,0.85)';
+    ctx.stroke();
+  }
+
+  function selectRegion(rg) { selectedId = rg.id; drawSelection(); }
+  function clearSelection() {
+    if (selectedId == null) return;
+    selectedId = null;
+    drawSelection();
+  }
+
   // ---- colour popup ----------------------------------------------------------
   let pop, grid, pick, custom, nameEl, imgBtn, imgRemoveBtn;
   let current = null; // region currently being edited
@@ -176,6 +274,7 @@
     nameEl = $('regionPopName');
     imgBtn = $('regionPopImage');
     imgRemoveBtn = $('regionPopImageRemove');
+    selLayer = $('regionSelLayer');
 
     // Build the preset swatch grid ahead of the pick chip, just like js/colors.js,
     // so the clear chip leads and the custom-pick chip stays the last cell.
@@ -188,25 +287,40 @@
       grid.insertBefore(sw, pick);
     });
 
-    // Click on the map → hit-test → open the popup for the district under the cursor.
-    // A small drag-guard (recorded on pointerdown) ignores the click that ends a
-    // marker drag or a draw-to-recrop rubber-band.
+    // Is this event in a mode / on an element where region picking shouldn't fire?
+    function blocked(e) {
+      return stage.classList.contains('cropping')      // draw-to-recrop mode
+          || stage.classList.contains('placing-image') // district-image placement
+          || e.target.closest('.color-pop')            // a popup
+          || e.target.closest('.marker')               // a marker
+          || e.target.closest('.zoom-ctl');            // the recrop / pan controls
+    }
+
+    // LEFT-click on the map → SELECT the district under the cursor (striped tint);
+    // clicking sea / empty space deselects. The menu is right-click only now, so a
+    // left click always dismisses any open popup. A small drag-guard (recorded on
+    // pointerdown) ignores the click that ends a marker drag or a recrop rubber-band.
     let downX = 0, downY = 0;
     stage.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; });
     stage.addEventListener('click', (e) => {
-      if (e.target.closest('.color-pop')) return;            // clicks inside a popup
+      if (blocked(e)) return;
       if (Math.abs(e.clientX - downX) > 6 || Math.abs(e.clientY - downY) > 6) return; // was a drag
-      if (stage.classList.contains('cropping')) return;      // draw-to-recrop mode
-      if (stage.classList.contains('placing-image')) return; // district-image placement
-      if (e.target.closest('.marker') || e.target.closest('.zoom-ctl')) return;
+      closePop();
+      const rg = regionAt(e.clientX, e.clientY);
+      // toggle: clicking the already-selected district (or sea / empty) deselects.
+      if (rg && rg.id !== selectedId) selectRegion(rg); else clearSelection();
+    });
+
+    // RIGHT-click on a district → select it (if not already) and open its menu at
+    // the cursor. Suppress the browser context menu anywhere over the map so the
+    // right-click reads as ours; off a district it just dismisses the popup.
+    stage.addEventListener('contextmenu', (e) => {
+      if (blocked(e)) return;
       const cv = liveMap();
-      if (!cv) return;
-      const fr = clientToMapFrac(cv, e.clientX, e.clientY);
-      if (!fr) { closePop(); return; }
-      if (isWaterAt(cv, fr.fx, fr.fy)) { closePop(); return; } // sea → not pickable
-      const ll = ATLAS.pxFracToLatLon(cv._meta.view, fr.fx, fr.fy);
-      const rg = pickRegion(cv._regions, ll.lon, ll.lat);
-      if (rg) openPop(rg, e.clientX, e.clientY);
+      if (!cv) return; // no live map → leave the native menu alone
+      e.preventDefault();
+      const rg = regionAt(e.clientX, e.clientY);
+      if (rg) { selectRegion(rg); openPop(rg, e.clientX, e.clientY); }
       else closePop();
     });
 
@@ -240,8 +354,23 @@
       if (pop.contains(e.target) || e.target.closest('#stage')) return;
       closePop();
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) closePop(); });
+    // Escape steps back: close an open menu first, then clear the selection.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (!pop.hidden) closePop();
+      else clearSelection();
+    });
+
+    // The overlay tracks the canvas's displayed size (mirrors markers' resize hook).
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(selRaf);
+      selRaf = requestAnimationFrame(drawSelection);
+    });
   }
+
+  // Public: redraw the selection overlay after the map is (re)mounted — app.js
+  // calls this from mountCanvas, alongside the marker overlay's reposition.
+  ATLAS.regions = { refresh: drawSelection };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
