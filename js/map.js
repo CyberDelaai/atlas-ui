@@ -643,6 +643,49 @@
     }
   }
 
+  // Stroke a region's EXACT closed rings as a border line — like drawBorders, but it
+  // traces the (un-simplified) face polygon itself and closes each ring. drawBorders
+  // can't do this: it draws open polylines, and feeding it a closed ring (first point
+  // repeated) collapses the Douglas-Peucker baseline to zero length, which drops every
+  // interior vertex. Used to lay a border on a district IMAGE's own edge (step 4e),
+  // where the simplified admin/city lines bow inward of the ring that clips the image.
+  // Shares drawBorders' knockout: a water mask keeps it off the sea, an erase mask hides
+  // a group's internal seams — both need the line stroked offscreen then composited.
+  function strokeRingOutline(mctx, ringsArr, v, mapW, mapH, col, lw, alpha, waterMask, eraseMask) {
+    const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+    const knockout = waterMask || eraseMask;
+    let layer = null, ctx = mctx;
+    if (knockout) {
+      layer = document.createElement('canvas');
+      layer.width = mapW; layer.height = mapH;
+      ctx = layer.getContext('2d');
+    }
+    ctx.save();
+    ctx.strokeStyle = rgb(col, alpha == null ? 0.9 : alpha);
+    ctx.lineWidth = lw == null ? BORDER_LW : lw;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const ring of ringsArr) {
+      if (ring.length < 2) continue;
+      for (let i = 0; i < ring.length; i++) {
+        const x = (lonToX(ring[i][0], v.z) - v.x0) * sx;
+        const y = (latToY(ring[i][1], v.z) - v.y0) * sy;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.restore();
+    if (knockout) {
+      const id = ctx.getImageData(0, 0, mapW, mapH), d = id.data;
+      for (let p = 0; p < mapW * mapH; p++) {
+        if ((waterMask && waterMask[p]) || (eraseMask && eraseMask[p])) d[p * 4 + 3] = 0;
+      }
+      ctx.putImageData(id, 0, 0);
+      mctx.drawImage(layer, 0, 0);
+    }
+  }
+
   // Name a detected district face by the OSM admin relation it falls in: the
   // smallest named relation whose rings contain the point wins (so a face inside a
   // neighbourhood takes the neighbourhood's name, not the city around it); '' when
@@ -1261,6 +1304,20 @@
           opts.districtsLandOnly ? fill : null, groupErase);
         mctx.restore();
       }
+      // The re-stroke above redraws the SIMPLIFIED border lines, but the image is
+      // clipped to the EXACT (un-simplified) detected ring — so wherever a simplified
+      // line bows inward of that ring, the opaque image covers the border and spills a
+      // hairline onto the neighbour, with the re-stroke landing uselessly under the
+      // picture. Lay each imaged region's own outline down last, traced from the very
+      // ring that clips the image (strokeRingOutline — no simplify), so a border always
+      // sits on the image's own edge. The line straddles the boundary (not clipped to
+      // the region); groupErase still hides a group's internal seams, and the land mask
+      // keeps the outline off the water so the coast stays as the coastline re-stroke left it.
+      for (const rg of imaged) {
+        strokeRingOutline(mctx, rg.rings, v, mapW, mapH, COL.line,
+          CITY_BORDER_LW, CITY_BORDER_ALPHA,
+          opts.districtsLandOnly ? fill : null, groupErase);
+      }
     }
 
     // 5) compose final canvas (map + margins + bottom strip)
@@ -1307,6 +1364,32 @@
     // shouldn't be selectable there. Like _regions, kept off _meta (heavy, and only
     // meaningful for this session's live canvas).
     out._waterMask = fill;
+    // Build a layer with a district's EXACT border for the selection overlay
+    // (js/regions.js). The striped highlight there clips to the flood-detected
+    // ring, which slightly overshoots the drawn border; for the OUTLINE we instead
+    // re-stroke the very lines the map is drawn from — the coastline + admin + city
+    // sub-layer — clipped to the region, in `col` ([r,g,b]). This is the same
+    // re-stroke step 4e does over district images, so the cyan edge lands on the
+    // grey border pixel-for-pixel. Drawn at native map resolution (mapW×mapH); the
+    // overlay scales it by the same factor the map canvas is displayed at, so the
+    // alignment survives. groupErase + the land-only mask are applied exactly as in
+    // the live render (one outline per group; land-only lines stay off the water).
+    out._regionEdgeLayer = function regionEdgeLayer(clipRings, col) {
+      const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
+      const layer = document.createElement('canvas');
+      layer.width = mapW; layer.height = mapH;
+      const lctx = layer.getContext('2d');
+      lctx.save();
+      clipToRings(lctx, clipRings, v, sx, sy);
+      drawCoastline(lctx, lp, col);
+      drawBorders(lctx, rings, v, mapW, mapH, col,
+        undefined, 0.95, undefined, null, groupErase);
+      drawBorders(lctx, cityRings, v, mapW, mapH, col,
+        CITY_BORDER_LW, 0.95, CITY_SIMPLIFY,
+        opts.districtsLandOnly ? fill : null, groupErase);
+      lctx.restore();
+      return layer;
+    };
     return out;
   };
 

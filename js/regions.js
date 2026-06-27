@@ -163,6 +163,9 @@
   // them into a group.
   let selLayer = null, selectedIds = new Set(), selRaf = 0, stripeTile = null;
 
+  // Signature cyan, as [r,g,b], for the selection edge re-stroke (see drawSelection).
+  const SEL_CYAN = [0, 240, 255];
+
   // A small repeating tile of diagonal cyan stripes over a translucent black base.
   // Built once and reused; createPattern is rebound to the live ctx each paint.
   function stripePattern(ctx) {
@@ -214,8 +217,11 @@
     ctx.clearRect(0, 0, W, H);
     const stripe = stripePattern(ctx);
 
-    // Paint each selected face's polygon independently — own clip + outline — so
-    // members of a group each read as selected without their shared edge vanishing.
+    // (1) Striped tint, per face — own clip so a group's members each read as
+    // selected without their shared edge vanishing. Clipped straight to the detected
+    // ring, exactly like the colour fill (drawRegionFills): the ring sits <1px off the
+    // drawn border, so the tint reaches it and the exact border edge composited in
+    // step (2) covers the hairline — same as the map border covers the colour fill.
     for (const rg of regs) {
       ctx.beginPath();
       for (const ring of rg.rings) {
@@ -232,10 +238,39 @@
       ctx.fillStyle = stripe;
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
-      ctx.lineWidth = 1.5;          // crisp cyan edge on top of the tint
-      ctx.strokeStyle = 'rgba(0,240,255,0.85)';
-      ctx.stroke();
     }
+
+    // (2) Crisp outline that EXACTLY matches the drawn borders: a layer re-stroked
+    // from the same coastline/admin/city lines the map is drawn from, clipped to the
+    // selected district(s), built at native map resolution by map.js and composited
+    // here scaled by the same factor the map canvas is displayed at — so the cyan
+    // edge lands on the grey border pixel-for-pixel. Falls back to stroking the
+    // detected ring on an older render that predates the helper.
+    const edge = edgeLayerFor(cv, regs);
+    if (edge) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(edge, 0, 0, M.mapW, M.mapH, 0, 0, W, H);
+    } else {
+      ctx.lineJoin = ctx.lineCap = 'round';
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0,240,255,0.9)';
+      ctx.stroke(); // last face's path is still current — good enough for the fallback
+    }
+  }
+
+  // Cache the native-resolution edge layer (see step 2 above): it depends only on the
+  // render + the selected set, not the display size, so a resize reuses it and only
+  // re-composites (cheap). Rebuilt when the live canvas or the selection changes.
+  let edgeCache = null; // { cv, key, layer }
+  function edgeLayerFor(cv, regs) {
+    if (!cv._regionEdgeLayer) return null;
+    const key = regs.map((r) => r.id).sort().join('|');
+    if (edgeCache && edgeCache.cv === cv && edgeCache.key === key) return edgeCache.layer;
+    const clipRings = [];
+    for (const rg of regs) for (const ring of rg.rings) clipRings.push(ring);
+    const layer = cv._regionEdgeLayer(clipRings, SEL_CYAN);
+    edgeCache = { cv, key, layer };
+    return layer;
   }
 
   // Selection mutators — all redraw the overlay.
