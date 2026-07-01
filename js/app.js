@@ -263,7 +263,11 @@
       const m = canvas._meta || {};
       writeOutInfo(m.zoom);
       $('dlBtn').disabled = false;
-      setStatus(ATLAS.t('st_done'), 'ok');
+      if (m.layerIssues && m.layerIssues.length) {
+        setStatus(ATLAS.t('st_done_partial') + ' ' + m.layerIssues.join(', ') + '.', 'warn');
+      } else {
+        setStatus(ATLAS.t('st_done'), 'ok');
+      }
       persist();
       persistMap(canvas, m.zoom);
     } catch (e) {

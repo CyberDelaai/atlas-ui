@@ -468,7 +468,9 @@
     try {
       const r = await fetch(C.BOUNDARIES + '?' + qs);
       json = await r.json();
-    } catch (e) { return []; } // don't cache failures — let the next render retry the fetch
+    } catch (e) {
+      const rings = []; rings.failed = true; return rings; // flagged so the UI can warn
+    }
     const rings = [];
     for (const f of (json && json.features) || []) {
       const g = f.geometry;
@@ -479,8 +481,10 @@
     }
     // Only cache a well-formed FeatureCollection; an ESRI error parses as JSON
     // ({error:...}) with no features array — caching its empty result would
-    // permanently blank the layer for this view.
+    // permanently blank the layer for this view. Flag the miss so the UI can warn
+    // the user instead of a silently borderless map.
     if (Array.isArray(json && json.features)) ringCache.set('b:' + qs, rings);
+    else rings.failed = true;
     return rings;
   }
 
@@ -547,7 +551,9 @@
     try {
       const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
       json = await r.json();
-    } catch (e) { return []; } // don't cache failures — a re-render should re-try
+    } catch (e) {
+      const out = []; out.failed = true; return out; // flagged so the UI can warn
+    }
     // A bbox query returns every admin relation that merely *touches* the view —
     // including neighbouring or marine zones (e.g. mainland districts, sea
     // experimental zones) that sprawl far beyond the city being mapped. Drawn as
@@ -589,7 +595,11 @@
       });
     }
     // Only cache a clean Overpass result (see fetchBuildings for the same guard).
+    // A `remark` on an otherwise-parsed response means Overpass itself reported a
+    // problem (rate limit, timeout) — flag it too so the UI can warn instead of
+    // reading as "this area just has no districts".
     if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('rg:' + q, out);
+    else out.failed = true;
     return out;
   }
 
@@ -925,7 +935,9 @@
     try {
       const r = await fetch(C.CITY_BOUNDARIES + '?' + new URLSearchParams({ data: q }));
       json = await r.json();
-    } catch (e) { return []; } // don't cache failures — a re-render should re-try
+    } catch (e) {
+      const out = []; out.failed = true; return out; // flagged so the UI can warn
+    }
     const out = [];
     for (const el of (json && json.elements) || []) {
       const h = buildingHeight(el.tags);
@@ -939,6 +951,7 @@
     }
     // Only cache a clean Overpass result (see fetchRegions for the same guard).
     if (json && Array.isArray(json.elements) && !json.remark) ringCache.set('bld:' + q, out);
+    else out.failed = true;
     return out;
   }
 
@@ -1172,7 +1185,6 @@
     // skeletonising them mangled the text. Vector geometry has no labels at all
     // and projects to crisp lines. See fetchBoundaries / drawBorders.
     const rings = await fetchBoundaries(v, mapW);
-    console.log('[DEBUG] rings.length=', rings.length, 'BORDER_LW=', BORDER_LW, 'ring0.len=', rings[0] && rings[0].length);
     tick();
 
     // 4b) finer city / district regions from OSM (admin_level 6-10), fetched as whole
@@ -1277,6 +1289,15 @@
     tick();
     drawBuildings(mctx, buildings, v, mapW, mapH, COL, opts.areaKmW);
 
+    // Which Overpass/ESRI layers came back flagged (network error, HTTP failure,
+    // or an Overpass `remark` — see fetchBoundaries/fetchRegions/fetchBuildings).
+    // Surfaced on _meta so app.js can tell the user a layer is silently missing
+    // instead of it just reading as "this area has none".
+    const layerIssues = [];
+    if (rings.failed) layerIssues.push('borders');
+    if (regions.failed) layerIssues.push('districts');
+    if (buildings.failed) layerIssues.push('buildings');
+
     // 4d) per-district background images: drawn last of the map layers, on top of
     // terrain / water / fills / borders / buildings, clipped to each district's
     // polygon. Markers are composited later (at export, on a copy), so they stay on
@@ -1353,7 +1374,7 @@
     // Stash the view geometry + map-region placement so the UI can map a
     // rectangle drawn over the map back to coordinates (draw-to-recrop).
     out._meta = { zoom: v.z, scaleKm: niceScale(opts.areaKmW), view: v, mapW, mapH, pad,
-      areaKmW: opts.areaKmW, areaKmH: opts.areaKmH };
+      areaKmW: opts.areaKmW, areaKmH: opts.areaKmH, layerIssues };
     // Clickable district geometry for the colour-pick UI (js/regions.js): the
     // flood-detected faces, NOT the raw OSM relations. Kept off _meta on purpose:
     // _meta is JSON-persisted with the map (app.js persistMap), and these rings are
