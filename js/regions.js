@@ -398,7 +398,9 @@
 
     // Build the preset swatch grid ahead of the pick chip, just like js/colors.js,
     // so the clear chip leads and the custom-pick chip stays the last cell.
-    C.PALETTE.forEach((hex) => {
+    // Trimmed to the first 16 presets (drop the last 8) — this popup's grid was
+    // getting too tall; the custom picker still covers the rest.
+    C.PALETTE.slice(0, -8).forEach((hex) => {
       const sw = document.createElement('div');
       sw.className = 'swatch';
       sw.dataset.color = hex;

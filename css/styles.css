@@ -369,7 +369,7 @@
   }
   .color-grid {
     display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
-    width: 228px;
+    width: 208px; /* exactly 6 * 28px swatches + 5 * 8px gaps, no leftover slack */
   }
   .swatch {
     width: 28px; height: 28px; border: 1px solid var(--dim); cursor: pointer;
