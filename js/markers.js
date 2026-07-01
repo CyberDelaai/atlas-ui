@@ -629,15 +629,19 @@
       persist(); sync(); syncEditorShape(m);
     });
 
-    // colour palette: inject the shared preset swatches ahead of the picker chip,
-    // then commit a pick (or reset to the map default) to the open marker.
+    // colour palette: inject preset swatches ahead of the picker chip, then
+    // commit a pick (or reset to the map default) to the open marker. Markers
+    // are a standalone overlay (see ACCENT above), so this grid skips the
+    // shared C.PALETTE's muted teal tail (ATLAS's own map-default swatches,
+    // meant for the land/water/etc popups) in favour of a fully saturated set —
+    // 22 bright cyberpunk presets so default chip + presets + pick chip total
+    // 24: exactly three rows of eight, the pick chip capping the last row
+    // rather than wrapping onto a lonely fourth.
+    const MARKER_PRESETS = (C.PALETTE || []).slice(0, 18)
+      .concat(['#ff006e', '#adff2f', '#ffbe0b', '#8338ec']);
     const meGrid = $('meColorGrid');
     const mePick = meGrid.querySelector('.me-sw-pick');
-    // drop the last preset so default + presets + pick chip total 24 — exactly
-    // three rows of eight, with the pick chip capping the third row (rather than
-    // wrapping onto a lonely fourth row). Any dropped colour is still reachable
-    // via the custom picker.
-    (C.PALETTE || []).slice(0, -1).forEach((hex) => {
+    MARKER_PRESETS.forEach((hex) => {
       const sw = document.createElement('button');
       sw.type = 'button';
       sw.className = 'me-sw';
