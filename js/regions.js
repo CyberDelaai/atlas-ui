@@ -35,7 +35,7 @@
   // ---- restore persisted groups (data only) ----------------------------------
   // A group fuses several detected faces into one region: shared fill (written
   // per-member into regionColors), one background image (under districtImages[id]),
-  // and the borders between members masked out (buildGroupEraseMask in map.js).
+  // and the borders between members masked out (buildGroupMasks in map.js).
   if (!S.regionGroups || !Array.isArray(S.regionGroups)) S.regionGroups = [];
   try {
     const raw = localStorage.getItem('atlas:regionGroups');

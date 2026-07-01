@@ -719,51 +719,94 @@
     return best;
   }
 
-  // Build a per-pixel mask (mapW×mapH, 1 = erase) marking the INTERIOR of each
-  // district group, used to knock the borders BETWEEN a group's members out of the
-  // stroked line layers so the group reads as one region. Each member face is filled
-  // solid (the faces abut at the wall centre, so the union is gap-free); the mask is
-  // then eroded 1px so the group's OUTER boundary line — centred on that edge — is
-  // preserved while the fully-interior shared walls stay marked. Returns null when
-  // there are no live groups. `groups` carry their resolved member faces (.faces).
-  function buildGroupEraseMask(groups, v, mapW, mapH) {
-    if (!groups || !groups.length) return null;
+  // 4-neighbour dilate / erode of a 0/1 mask (mapW×mapH). Edge pixels are never
+  // eroded (can't test all 4 neighbours there) so a mask that already reaches the
+  // canvas edge stays put, matching the frame acting as a wall in js/districts.js.
+  function dilate1(src, mapW, mapH) {
+    const out = new Uint8Array(src.length);
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        const p = y * mapW + x;
+        if (src[p]) { out[p] = 1; continue; }
+        if ((x > 0 && src[p - 1]) || (x < mapW - 1 && src[p + 1]) ||
+            (y > 0 && src[p - mapW]) || (y < mapH - 1 && src[p + mapW])) out[p] = 1;
+      }
+    }
+    return out;
+  }
+  function erode1(src, mapW, mapH) {
+    const out = new Uint8Array(src.length);
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        const p = y * mapW + x;
+        if (!src[p]) continue;
+        if (x === 0 || y === 0 || x === mapW - 1 || y === mapH - 1) { out[p] = 1; continue; }
+        if (src[p - 1] && src[p + 1] && src[p - mapW] && src[p + mapW]) out[p] = 1;
+      }
+    }
+    return out;
+  }
+
+  // Rasterise a set of faces' rings solid (evenodd) into a mapW×mapH 0/1 mask, then
+  // dilate 1px. The faces' rings come from js/districts.js, each independently
+  // Douglas-Peucker-simplified — so two faces that share a wall in the detector can
+  // end up with that shared edge a px or so apart once simplified (the DP anchors
+  // differ once the shared arc is embedded in each face's own, differently-shaped
+  // ring). Filling them separately can then leave a hairline sliver that belongs to
+  // neither polygon; the dilate closes it before that sliver is used for anything.
+  function rasterizeFacesDilated(faces, v, mapW, mapH) {
     const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
     const cv = document.createElement('canvas');
     cv.width = mapW; cv.height = mapH;
     const ctx = cv.getContext('2d');
     ctx.fillStyle = '#fff';
-    for (const g of groups) {
-      for (const f of g.faces) {
-        ctx.beginPath();
-        for (const ring of f.rings) {
-          if (ring.length < 3) continue;
-          for (let i = 0; i < ring.length; i++) {
-            const x = (lonToX(ring[i][0], v.z) - v.x0) * sx;
-            const y = (latToY(ring[i][1], v.z) - v.y0) * sy;
-            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-          }
-          ctx.closePath();
+    for (const f of faces) {
+      ctx.beginPath();
+      for (const ring of f.rings) {
+        if (ring.length < 3) continue;
+        for (let i = 0; i < ring.length; i++) {
+          const x = (lonToX(ring[i][0], v.z) - v.x0) * sx;
+          const y = (latToY(ring[i][1], v.z) - v.y0) * sy;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
         }
-        ctx.fill('evenodd');
+        ctx.closePath();
       }
+      ctx.fill('evenodd');
     }
     const data = ctx.getImageData(0, 0, mapW, mapH).data;
-    const N = mapW * mapH;
-    const raw = new Uint8Array(N);
-    for (let p = 0; p < N; p++) if (data[p * 4 + 3] > 8) raw[p] = 1;
-    // erode 1px (4-neighbour): drop any marked pixel touching an unmarked one, so the
-    // outer-boundary line band is left untouched while interior walls stay erased.
-    const mask = new Uint8Array(N);
-    for (let y = 0; y < mapH; y++) {
-      for (let x = 0; x < mapW; x++) {
-        const p = y * mapW + x;
-        if (!raw[p]) continue;
-        if (x === 0 || y === 0 || x === mapW - 1 || y === mapH - 1) { mask[p] = 1; continue; }
-        if (raw[p - 1] && raw[p + 1] && raw[p - mapW] && raw[p + mapW]) mask[p] = 1;
-      }
+    const raw = new Uint8Array(mapW * mapH);
+    for (let p = 0; p < raw.length; p++) if (data[p * 4 + 3] > 8) raw[p] = 1;
+    return dilate1(raw, mapW, mapH);
+  }
+
+  // Build the two masks a district group needs to read as one region:
+  //  - eraseMask (mapW×mapH, 1 = erase): the INTERIOR of every group, used to knock
+  //    the borders BETWEEN a group's members out of the stroked line layers. The
+  //    union of all groups' members is dilated (see rasterizeFacesDilated) then
+  //    eroded 2px — 1px to undo that dilation, 1px more so the group's OUTER
+  //    boundary line, centred on that edge, is left untouched while the fully-
+  //    interior shared walls stay marked.
+  //  - fillPatches ([{ color, mask }]): one dilated union mask per COLOURED group,
+  //    stamped under drawRegionFills' normal per-member vector fill (see there) so
+  //    the same simplification sliver that needs erasing above can't also show up
+  //    as an unpainted crack once the covering border line is gone.
+  // Returns { eraseMask: null, fillPatches: [] } when there are no live groups.
+  // `groups` carry their resolved member faces (.faces).
+  function buildGroupMasks(groups, v, mapW, mapH) {
+    if (!groups || !groups.length) return { eraseMask: null, fillPatches: [] };
+    const allFaces = [];
+    for (const g of groups) for (const f of g.faces) allFaces.push(f);
+    const eraseRaw = rasterizeFacesDilated(allFaces, v, mapW, mapH);
+    const eraseMask = erode1(erode1(eraseRaw, mapW, mapH), mapW, mapH);
+
+    const overrides = (ATLAS.state && ATLAS.state.regionColors) || {};
+    const fillPatches = [];
+    for (const g of groups) {
+      const color = overrides[g.faces[0].id];
+      if (!color) continue;
+      fillPatches.push({ color, mask: rasterizeFacesDilated(g.faces, v, mapW, mapH) });
     }
-    return mask;
+    return { eraseMask, fillPatches };
   }
 
   // Paint a translucent fill under the borders for each region the user has
@@ -773,11 +816,18 @@
   // (lower admin_level) paint first so a nested district's colour lands on top.
   // Like drawBorders, an optional water mask clips the fill to land. Regions with
   // no override draw nothing — the default look is borders-only, unchanged.
-  function drawRegionFills(mctx, regions, v, mapW, mapH, waterMask) {
+  // `fillPatches` (from buildGroupMasks) stamps each coloured group's dilated union
+  // mask down FIRST, so the per-member vector fills below — each clipped to its own
+  // independently-simplified ring — paint over it everywhere they're accurate and
+  // only leave the patch showing in the hairline sliver where two members' rings
+  // don't quite meet (see buildGroupMasks). No visible seam either way: matched
+  // colour and alpha, and clip+clearRect+fill (not a plain fill) means a member
+  // painting over the patch can't compound alpha with it.
+  function drawRegionFills(mctx, regions, v, mapW, mapH, waterMask, fillPatches) {
     const overrides = (ATLAS.state && ATLAS.state.regionColors) || {};
     const painted = regions.filter((rg) => overrides[rg.id] && rg.rings.length)
       .sort((a, b) => a.level - b.level); // coarse (lower level) first
-    if (!painted.length) return;
+    if (!painted.length && !(fillPatches && fillPatches.length)) return;
     const sx = mapW / (v.x1 - v.x0), sy = mapH / (v.y1 - v.y0);
     // Always build the fills on a transparent offscreen layer, then composite once.
     // The knockout step below (clearRect within each region) must only erase other
@@ -786,6 +836,20 @@
     const layer = document.createElement('canvas');
     layer.width = mapW; layer.height = mapH;
     const ctx = layer.getContext('2d');
+    if (fillPatches && fillPatches.length) {
+      const id = ctx.createImageData(mapW, mapH);
+      const d = id.data;
+      const a = Math.round(REGION_FILL_ALPHA * 255);
+      for (const { color, mask } of fillPatches) {
+        const [r, g, b] = ATLAS.hexToArr(color);
+        for (let p = 0; p < mask.length; p++) {
+          if (!mask[p]) continue;
+          const o = p * 4;
+          d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = a;
+        }
+      }
+      ctx.putImageData(id, 0, 0);
+    }
     for (const rg of painted) {
       ctx.save();
       ctx.beginPath();
@@ -1258,15 +1322,16 @@
       id: g.id, name: '', level: 0,
       rings: g.faces.reduce((acc, f) => acc.concat(f.rings), []),
     }));
-    const groupErase = buildGroupEraseMask(groups, v, mapW, mapH);
+    const { eraseMask: groupErase, fillPatches: groupFillPatches } = buildGroupMasks(groups, v, mapW, mapH);
 
     // region fills sit UNDER every border line, so paint them before either border set.
     // Fills are ALWAYS clipped to land (low-poly water mask): a detected face can still
     // hug the coast, and colouring open sea is never wanted, so the clip is
     // unconditional here; the districtsLandOnly toggle still governs the district
     // border *lines* below. Grouped members each carry the group's colour (written
-    // per-member into regionColors), so this is unchanged — groupErase hides the seams.
-    drawRegionFills(mctx, districts, v, mapW, mapH, fill);
+    // per-member into regionColors), so this is unchanged; groupFillPatches backstops
+    // the per-member vector fill at a group's internal seams, groupErase hides them.
+    drawRegionFills(mctx, districts, v, mapW, mapH, fill, groupFillPatches);
 
     // country / region (admin-1) borders, on top of the fills. groupErase knocks out
     // any segment interior to a group so members read as one region.

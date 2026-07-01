@@ -151,9 +151,10 @@ ATLAS.state = {
   // borders BETWEEN members are masked out so the group reads as one area. Each
   // entry is { id, members:[faceId…] }, where faceId is the centroid-based district
   // id (js/districts.js) and id = 'g:' + the sorted members joined. The shared fill
-  // is written per-member into regionColors (so drawRegionFills is unchanged); the
-  // shared image lives under districtImages[groupId]; the internal-border knockout
-  // is built per render (buildGroupEraseMask in map.js). Like regionColors, this is
+  // is written per-member into regionColors (drawRegionFills still paints per member,
+  // backstopped by a raster patch at the seams); the shared image lives under
+  // districtImages[groupId]; the internal-border knockout is built per render
+  // (buildGroupMasks in map.js). Like regionColors, this is
   // keyed on centroid ids, so a group survives a recolour re-render and roughly a
   // pan, and goes dormant once the ids drift. Managed by js/regions.js, persisted
   // under atlas:regionGroups.
