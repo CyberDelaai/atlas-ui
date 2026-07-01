@@ -224,8 +224,10 @@
     const sr = stage.getBoundingClientRect();
     const cr = mc.cv.getBoundingClientRect();
     const scale = cr.width / mc.cv.width; // uniform (CSS preserves aspect)
-    layer.style.left = (cr.left - sr.left + M.pad * scale) + 'px';
-    layer.style.top = (cr.top - sr.top + M.pad * scale) + 'px';
+    // subtract the stage's own border width: getBoundingClientRect() is its border
+    // box, but left/top on an absolute child are relative to its padding box.
+    layer.style.left = (cr.left - sr.left - stage.clientLeft + M.pad * scale) + 'px';
+    layer.style.top = (cr.top - sr.top - stage.clientTop + M.pad * scale) + 'px';
     const W = M.mapW * scale, H = M.mapH * scale;
     layer.style.width = W + 'px';
     layer.style.height = H + 'px';

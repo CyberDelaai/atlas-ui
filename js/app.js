@@ -390,11 +390,14 @@
 
   // Position the rubber-band div (a child of #stage) for the two client points.
   function drawCropSel(x0, y0, x1, y1) {
-    const sr = $('stage').getBoundingClientRect();
+    const stage = $('stage');
+    const sr = stage.getBoundingClientRect();
     const sel = $('cropSel');
     sel.hidden = false;
-    sel.style.left = (Math.min(x0, x1) - sr.left) + 'px';
-    sel.style.top = (Math.min(y0, y1) - sr.top) + 'px';
+    // subtract the stage's own border width: getBoundingClientRect() is its border
+    // box, but left/top on an absolute child are relative to its padding box.
+    sel.style.left = (Math.min(x0, x1) - sr.left - stage.clientLeft) + 'px';
+    sel.style.top = (Math.min(y0, y1) - sr.top - stage.clientTop) + 'px';
     sel.style.width = Math.abs(x1 - x0) + 'px';
     sel.style.height = Math.abs(y1 - y0) + 'px';
   }

@@ -200,13 +200,18 @@
     if (!regs.length) { selLayer.hidden = true; return; }
 
     const M = cv._meta;
-    const sr = $('stage').getBoundingClientRect();
+    const stage = $('stage');
+    const sr = stage.getBoundingClientRect();
     const cr = cv.getBoundingClientRect();
     const scale = cr.width / cv.width; // uniform (CSS preserves aspect)
     const W = M.mapW * scale, H = M.mapH * scale;
     selLayer.hidden = false;
-    selLayer.style.left = (cr.left - sr.left + M.pad * scale) + 'px';
-    selLayer.style.top = (cr.top - sr.top + M.pad * scale) + 'px';
+    // left/top of an absolutely-positioned child are relative to the stage's PADDING
+    // box, but getBoundingClientRect() returns its BORDER box — subtract the stage's
+    // own border width (clientLeft/Top) or the overlay lands one border-width too far
+    // right/down (visible as the selection outline sitting off the drawn border).
+    selLayer.style.left = (cr.left - sr.left - stage.clientLeft + M.pad * scale) + 'px';
+    selLayer.style.top = (cr.top - sr.top - stage.clientTop + M.pad * scale) + 'px';
     selLayer.style.width = W + 'px';
     selLayer.style.height = H + 'px';
     const dpr = window.devicePixelRatio || 1;
