@@ -15,8 +15,10 @@
 // over a raster, which this canvas app is already built around.
 //
 // Pipeline: stroke all the lines onto an offscreen mask -> the lit pixels are walls
-// -> 4-connected flood fill labels each enclosed pool of non-wall pixels -> each pool
-// is vectorised (marching squares + ring assembly + Douglas–Peucker) back into lon/lat
+// -> 4-connected flood fill labels each enclosed pool of non-wall pixels -> pools too
+// small to be real districts dissolve back into open territory and get split evenly
+// between their real neighbours, same as the wall band itself -> each pool is
+// vectorised (marching squares + ring assembly + Douglas–Peucker) back into lon/lat
 // rings and handed back in the SAME { id, name, level, rings } shape the OSM relations
 // used to have, so the fill (drawRegionFills), click-to-pick (js/regions.js) and
 // per-district images (js/district-images.js) all keep working unchanged. Each face's
@@ -178,28 +180,59 @@
       pools.push({ L, area, sx, sy, x0, y0, x1, y1, fx, fy });
     }
 
-    // 2b) grow each pool out into the wall band so the traced fills reach the
-    // border lines instead of stopping ~1–2px short of them. The flood above
-    // never claims wall pixels (the rasterised lines + their anti-aliased
-    // fringe), so each pool's edge sits inside the stroke and the whole wall
-    // band between two neighbours reads as an unfilled gap — uneven because the
-    // stroke's width/AA vary along it. A multi-source BFS over JUST the wall
-    // pixels (pools stay put — we only write where !label) assigns each wall
-    // pixel to its nearest pool, so adjacent fills meet at the line's centre.
-    // GROW = half the stroke + 1 for the AA skirt; two fronts close the band
-    // with at most ~1px of overlap, hidden under the border drawn on top.
-    const GROW = Math.ceil(WALL_LW / 2) + 1;
+    // 2a) dissolve tiny NON-water pools before growth. A pool under MIN_AREA_PX
+    // is a sliver pinched off between two near-parallel border lines, not a real
+    // district — clearing its label turns it back into open territory, which to
+    // the BFS below looks exactly like a wall pixel. That lets 2b's growth split
+    // the sliver evenly between whichever real districts border it, instead of
+    // it just vanishing as an unfilled hole. A water pool is never dissolved
+    // regardless of size — a pond stays a pond, it doesn't leak into the
+    // neighbouring land district.
+    for (const pl of pools) {
+      if (pl.area >= MIN_AREA_PX) continue;
+      let rx = Math.round(pl.sx / pl.area), ry = Math.round(pl.sy / pl.area);
+      if (label[ry * mapW + rx] !== pl.L) { rx = pl.fx; ry = pl.fy; }
+      if (isWater && isWater(rx, ry)) continue;
+      for (let y = pl.y0; y <= pl.y1; y++) {
+        for (let x = pl.x0; x <= pl.x1; x++) {
+          const p = y * mapW + x;
+          if (label[p] === pl.L) label[p] = 0;
+        }
+      }
+    }
+
+    // 2b) grow every surviving pool (real districts + water) out into whatever
+    // isn't labelled yet — the wall band, and any sliver dissolved in 2a — so
+    // the traced fills reach the border lines / each other instead of stopping
+    // short. Multi-source, level-synchronised BFS: every source pool advances
+    // exactly 1px per round, so two pools competing for the same gap meet in
+    // the middle and split it evenly, rather than whichever pool happens to be
+    // processed first claiming all of it. Runs to convergence rather than a
+    // fixed step count — a dissolved sliver can be much wider than the ~1px
+    // wall band. Tracks each pool's bbox as it grows so step 3's trace window
+    // doesn't clip the area it just absorbed.
+    const poolByLabel = new Array(next + 1);
+    for (const pl of pools) poolByLabel[pl.L] = pl;
+    const claim = (r, L, nx, ny, nextF) => {
+      label[r] = L;
+      const po = poolByLabel[L];
+      if (nx < po.x0) po.x0 = nx;
+      if (nx > po.x1) po.x1 = nx;
+      if (ny < po.y0) po.y0 = ny;
+      if (ny > po.y1) po.y1 = ny;
+      nextF.push(r);
+    };
     let frontier = [];
     for (let p = 0; p < N; p++) if (label[p]) frontier.push(p);
-    for (let step = 0; step < GROW && frontier.length; step++) {
+    while (frontier.length) {
       const nextF = [];
       for (const q of frontier) {
         const L = label[q];
         const x = q % mapW, y = (q / mapW) | 0;
-        if (x > 0)        { const r = q - 1;    if (wall[r] && !label[r]) { label[r] = L; nextF.push(r); } }
-        if (x < mapW - 1) { const r = q + 1;    if (wall[r] && !label[r]) { label[r] = L; nextF.push(r); } }
-        if (y > 0)        { const r = q - mapW; if (wall[r] && !label[r]) { label[r] = L; nextF.push(r); } }
-        if (y < mapH - 1) { const r = q + mapW; if (wall[r] && !label[r]) { label[r] = L; nextF.push(r); } }
+        if (x > 0        && !label[q - 1])    claim(q - 1, L, x - 1, y, nextF);
+        if (x < mapW - 1 && !label[q + 1])    claim(q + 1, L, x + 1, y, nextF);
+        if (y > 0        && !label[q - mapW]) claim(q - mapW, L, x, y - 1, nextF);
+        if (y < mapH - 1 && !label[q + mapW]) claim(q + mapW, L, x, y + 1, nextF);
       }
       frontier = nextF;
     }
@@ -216,11 +249,9 @@
       if (isWater && isWater(rx, ry)) continue; // a sea pool — not a district
       const at = (x, y) => (x >= 0 && y >= 0 && x < mapW && y < mapH &&
                             label[y * mapW + x] === pl.L) ? 1 : 0;
-      // bbox was recorded pre-dilation; the pool now reaches up to GROW px
-      // further out, so widen the trace window (clamped) or it clips the edge.
-      const segs = contourSegments(at,
-        Math.max(0, pl.x0 - GROW), Math.max(0, pl.y0 - GROW),
-        Math.min(mapW - 1, pl.x1 + GROW), Math.min(mapH - 1, pl.y1 + GROW));
+      // bbox was tracked live through 2b's growth, so it already covers
+      // whatever wall band / dissolved sliver the pool absorbed.
+      const segs = contourSegments(at, pl.x0, pl.y0, pl.x1, pl.y1);
       const rings = [];
       for (let ring of assembleRings(segs)) {
         // assembleRings closes each loop (first vertex repeated as last). RDP anchors
