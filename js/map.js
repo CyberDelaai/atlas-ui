@@ -297,7 +297,7 @@
   const COAST_STEP = 4;
   // Stroke widths (output px). Both the coast outline and the region/country
   // borders are vector strokes, so their width is set purely by these knobs.
-  const COAST_LW = 1.5;
+  const COAST_LW = 2;
   const BORDER_LW = 2;  // region/country border width (px); 1 = crisp 1px line
   // How hard to facet the region/country borders. The boundary geometry comes in
   // as GeoJSON rings (already lightly generalised server-side via
@@ -309,9 +309,9 @@
   // dimmer and a touch less faceted than the country/region lines so they read as a
   // finer layer underneath them. CITY_MAX_KM gates the whole layer off once the
   // captured area is wider than a city region — a country-scale view shows none.
-  const CITY_BORDER_LW = 1;
-  const CITY_BORDER_ALPHA = 0.55;
-  const CITY_SIMPLIFY = 2;
+  const CITY_BORDER_LW = 2;
+  const CITY_BORDER_ALPHA = 0.7;
+  const CITY_SIMPLIFY = 3.5;
   const CITY_MAX_KM = 160;
   // Translucent fill painted under the borders for any district the user has
   // clicked + colour-picked (ATLAS.state.regionColors). Kept low so the duotone
@@ -1172,6 +1172,7 @@
     // skeletonising them mangled the text. Vector geometry has no labels at all
     // and projects to crisp lines. See fetchBoundaries / drawBorders.
     const rings = await fetchBoundaries(v, mapW);
+    console.log('[DEBUG] rings.length=', rings.length, 'BORDER_LW=', BORDER_LW, 'ring0.len=', rings[0] && rings[0].length);
     tick();
 
     // 4b) finer city / district regions from OSM (admin_level 6-10), fetched as whole
