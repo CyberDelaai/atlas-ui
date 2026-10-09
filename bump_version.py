@@ -64,6 +64,7 @@ def stamp_seo(version):
         print(f"lastmod: {today} in {path.parent.name}/sitemap.xml")
         if path.parent.name == "cyberdeck-tools":
             print("reminder: the hub repo (cyberdeck-tools) changed too - commit it separately")
+    print(f"after pushing + deploy: python ../cyberdeck-tools/indexnow.py {TOOL_URL}  (pings Bing / Yandex)")
 
 
 def main():
