@@ -1,12 +1,12 @@
-<!-- ATLAS v0.4.14 -->
+<!-- ATLAS v0.4.15 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ATLAS — cyberdeck.tools</title>
-<meta name="description" content="ATLAS is a free in-browser tool from cyberdeck.tools. Runs entirely client-side — no backend, no build step." />
-<meta name="keywords" content="cyberpunk, atlas, ttrpg, gm tools, cyberdeck, vtt, browser tool" />
+<title>ATLAS — Cyberpunk Map Generator from Real Coordinates</title>
+<meta name="description" content="Free in-browser cyberpunk map generator: pick any real-world place and render a stylized terrain map with borders, districts and a scale bar. PNG export." />
+<meta name="keywords" content="cyberpunk, map generator, cyberpunk map, terrain map, hillshade map, city district map, real-world map, ttrpg, shadowrun, cyberpunk red, gm tools, png export" />
 <meta name="author" content="CyberDelaai" />
 <meta name="robots" content="index, follow" />
 <meta name="theme-color" content="#050507" />
@@ -19,17 +19,17 @@
 <!-- Open Graph / Twitter -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ATLAS" />
-<meta property="og:title" content="ATLAS — cyberdeck.tools" />
-<meta property="og:description" content="A free in-browser cyberdeck.tools utility. Runs entirely client-side." />
+<meta property="og:title" content="ATLAS — Cyberpunk Map Generator" />
+<meta property="og:description" content="Turn any real-world location into a cyberpunk-styled terrain map with borders, districts, labels and a scale bar. Runs in your browser, PNG export." />
 <meta property="og:url" content="https://cyberdeck.tools/atlas-ui/" />
 <meta property="og:image" content="https://cyberdeck.tools/atlas-ui/atlas_thumbnail.png" />
 <meta property="og:image:type" content="image/png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="ATLAS — cyberdeck.tools preview" />
+<meta property="og:image:alt" content="ATLAS — cyberpunk map generator preview: a teal hillshade map of Hong Kong with district borders" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="ATLAS — cyberdeck.tools" />
-<meta name="twitter:description" content="A free in-browser cyberdeck.tools utility." />
+<meta name="twitter:title" content="ATLAS — Cyberpunk Map Generator" />
+<meta name="twitter:description" content="Turn any real-world location into a cyberpunk-styled terrain map and export it as a PNG." />
 <meta name="twitter:image" content="https://cyberdeck.tools/atlas-ui/atlas_thumbnail.png" />
 
 <script type="application/ld+json">
@@ -37,11 +37,16 @@
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "ATLAS",
-  "description": "A free in-browser utility from cyberdeck.tools. Runs entirely client-side with no backend or build step.",
-  "applicationCategory": "UtilitiesApplication",
+  "alternateName": "ATLAS Map Generator",
+  "description": "Cyberpunk map generator — enter real-world coordinates or search for a place and render a stylized hillshade terrain map with country, region and city-district borders, a labelled centre pin, title strip and scale bar, then export it as a PNG. Useful for TTRPG game masters running Shadowrun or Cyberpunk RED who need setting maps as handouts.",
+  "applicationCategory": "DesignApplication",
+  "applicationSubCategory": "Map Generator",
   "operatingSystem": "Any (browser-based)",
   "browserRequirements": "Modern desktop browser",
   "url": "https://cyberdeck.tools/atlas-ui/",
+  "image": "https://cyberdeck.tools/atlas-ui/atlas_thumbnail.png",
+  "keywords": "cyberpunk, map generator, terrain map, city district map, ttrpg, shadowrun, cyberpunk red, game master tools, png export",
+  "isAccessibleForFree": true,
   "author": {
     "@type": "Person",
     "name": "CyberDelaai"
@@ -89,7 +94,7 @@
 </aside>
 <div class="app">
   <header class="top">
-    <h1 class="sr-only">ATLAS — cyberdeck.tools utility</h1>
+    <h1 class="sr-only">ATLAS — cyberpunk map generator for real-world locations with PNG export</h1>
     <div class="logo-menu">
       <button class="logo" id="logoBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu"><span class="chev" aria-hidden="true">&gt;</span> ATLAS_</button>
       <nav class="app-menu" id="appMenu" data-augmented-ui="tl-clip br-clip border" aria-label="cyberdeck.tools navigation" hidden>
@@ -101,7 +106,7 @@
         <a class="app-menu-item" href="https://cyberdeck.tools/eidolon-ui/">&gt; EIDOLON_</a>
       </nav>
     </div>
-    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.14</span></span></div>
+    <div class="tag"><span id="tagWord" class="glitchable" data-i18n="tag">ATLAS</span><span id="tagMeta" class="tag-meta"> // v<span id="tagVersion">0.4.15</span></span></div>
     <select class="lang-select" id="uiLangSel" aria-label="interface language"><option value="en">EN</option><option value="ru">RU</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option><option value="it">IT</option><option value="ja">JP</option><option value="zh">CN</option></select>
   </header>
 
